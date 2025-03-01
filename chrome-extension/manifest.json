@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "SCBA Form Filler",
+  "version": "1.0",
+  "description": "Automatically fills SCBA form with data from Fire Check application",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://form.gov.sg/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://form.gov.sg/*"],
+      "js": ["src/content.js"]
+    }
+  ],
+  "icons": {
+    "48": "src/icon48.png",
+    "128": "src/icon128.png"
+  }
+} 

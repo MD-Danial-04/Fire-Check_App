@@ -27,25 +27,25 @@
   }
 
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
+    --background: 20 10% 8%;
+    --foreground: 39 30% 95%;
+    --card: 20 10% 15%;
+    --card-foreground: 39 30% 95%;
+    --popover: 20 10% 8%;
+    --popover-foreground: 39 30% 95%;
+    --primary: 39 30% 95%;
+    --primary-foreground: 20 10% 8%;
+    --secondary: 20 10% 20%;
+    --secondary-foreground: 39 30% 95%;
+    --muted: 20 10% 20%;
+    --muted-foreground: 39 30% 70%;
+    --accent: 20 10% 12%;
+    --accent-foreground: 39 30% 95%;
     --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
+    --destructive-foreground: 39 30% 95%;
+    --border: 20 10% 20%;
+    --input: 20 10% 20%;
+    --ring: 39 30% 70%;
   }
 }
 
@@ -57,5 +57,191 @@
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
   }
+}
+
+/* Custom styles for BA Master List */
+/* Light theme styles */
+.bg-\[2E2521\] {
+  background-color: white !important;
+}
+
+.bg-white {
+  background-color: white !important;
+}
+
+.dark .bg-white {
+  background-color: hsl(20 10% 15%) !important;
+}
+
+.bg-\[2E2521\]\/50 {
+  background-color: hsl(0 0% 98%) !important;
+}
+
+.text-\[FCF6EC\] {
+  color: hsl(0 0% 20%) !important;
+}
+
+.text-\[FCF6EC\]\/50 {
+  color: hsl(0 0% 45%) !important;
+}
+
+.text-\[FCF6EC\]\/60 {
+  color: hsl(0 0% 45%) !important;
+}
+
+.border-\[FCF6EC\]\/10 {
+  border-color: hsl(0 0% 90%) !important;
+}
+
+.border-\[FCF6EC\]\/20 {
+  border-color: hsl(0 0% 85%) !important;
+}
+
+/* Dark theme styles */
+.dark .bg-\[2E2521\] {
+  background-color: hsl(20 10% 15%) !important;
+}
+
+.dark .bg-\[2E2521\]\/50 {
+  background-color: hsl(20 10% 12%) !important;
+}
+
+.dark .text-\[FCF6EC\] {
+  color: hsl(39 30% 95%) !important;
+}
+
+.dark .text-\[FCF6EC\]\/50 {
+  color: hsl(39 30% 70%) !important;
+}
+
+.dark .text-\[FCF6EC\]\/60 {
+  color: hsl(39 30% 70%) !important;
+}
+
+.dark .border-\[FCF6EC\]\/10 {
+  border-color: hsl(20 10% 20%) !important;
+}
+
+.dark .border-\[FCF6EC\]\/20 {
+  border-color: hsl(20 10% 25%) !important;
+}
+
+/* Fix for list view text and decorative dots */
+.text-gray-900 {
+  color: hsl(0 0% 10%) !important;
+}
+
+.dark .text-gray-900 {
+  color: hsl(39 30% 95%) !important;
+}
+
+.text-gray-500 {
+  color: hsl(0 0% 45%) !important;
+}
+
+.dark .text-gray-500 {
+  color: hsl(39 30% 70%) !important;
+}
+
+/* Ensure decorative dots are visible in light mode */
+.bg-gray-100 {
+  background-color: hsl(0 0% 95%) !important;
+}
+
+.dark .bg-gray-100 {
+  background-color: hsl(20 10% 20%) !important;
+}
+
+/* Fix for check/x icons in light mode */
+.text-gray-900 {
+  color: hsl(0 0% 10%) !important;
+}
+
+.dark .text-gray-900 {
+  color: hsl(39 30% 95%) !important;
+}
+
+/* Fix for list view entries */
+.font-\[\'Azeret_Mono\'\] {
+  color: inherit;
+}
+
+/* Fix for table text in light mode */
+.text-right {
+  color: inherit;
+}
+
+/* Fix for border colors in light mode */
+.border-gray-200 {
+  border-color: hsl(0 0% 90%) !important;
+}
+
+.dark .border-gray-200 {
+  border-color: hsl(20 10% 20%) !important;
+}
+
+/* Fix for card headers in light mode */
+.bg-white.dark\:bg-\[2E2521\] h3 {
+  color: hsl(0 0% 10%) !important;
+  border-bottom-color: hsl(0 0% 90%) !important;
+}
+
+.dark .bg-white.dark\:bg-\[2E2521\] h3 {
+  color: hsl(39 30% 95%) !important;
+  border-bottom-color: hsl(20 10% 20%) !important;
+}
+
+/* Fix for card backgrounds in list view */
+.bg-white.dark\:bg-\[2E2521\] {
+  background-color: hsl(0 0% 97%) !important;
+}
+
+.dark .bg-white.dark\:bg-\[2E2521\] {
+  background-color: hsl(20 10% 12%) !important;
+}
+
+/* Fix for card content in light mode */
+.bg-white.dark\:bg-\[2E2521\] .text-gray-900 {
+  color: hsl(0 0% 10%) !important;
+}
+
+.dark .bg-white.dark\:bg-\[2E2521\] .text-gray-900 {
+  color: hsl(39 30% 95%) !important;
+}
+
+/* Fix for card content in light mode */
+.bg-white.dark\:bg-\[2E2521\] .text-gray-500 {
+  color: hsl(0 0% 45%) !important;
+}
+
+.dark .bg-white.dark\:bg-\[2E2521\] .text-gray-500 {
+  color: hsl(39 30% 70%) !important;
+}
+
+/* Fix for background in light mode */
+.bg-white.dark\:bg-\[1C1917\] {
+  background-color: hsl(0 0% 100%) !important;
+}
+
+.dark .bg-white.dark\:bg-\[1C1917\] {
+  background-color: hsl(24 6% 9%) !important;
+}
+
+/* Add subtle border to cards for better definition */
+.bg-white.dark\:bg-\[2E2521\] {
+  border: 1px solid hsl(0 0% 90%) !important;
+}
+
+.dark .bg-white.dark\:bg-\[2E2521\] {
+  border: 1px solid hsl(20 10% 20%) !important;
+}
+
+/* Add subtle shadow to cards */
+.bg-white.dark\:bg-\[2E2521\] {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+.dark .bg-white.dark\:bg-\[2E2521\] {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
 }
 

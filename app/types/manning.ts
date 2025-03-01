@@ -22,4 +22,22 @@ export interface DutyInfo {
   duty_section_commander: string;
   duty_date: string;
   created_at: string;
+}
+
+export interface DailyStatistics {
+  total_strength: number;
+  total_ops_strength: number;
+  current_duty_ops: number;
+  leave_count: number;
+  mc_count: number;
+  course_count: number;
+  ld_count: number;
+  off_count: number;
+  oa_count: number;
+  MRV_count: number;
+  RFV_count: number;
+  LF811_count: number;
+  LF812_count: number;
+  leave_remarks?: string;
+  mc_remarks?: string;
 } 

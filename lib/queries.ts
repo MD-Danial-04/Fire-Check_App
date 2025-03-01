@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { PostgrestSingleResponse } from '@supabase/supabase-js'
+import type { PostgrestSingleResponse, SupabaseClient } from '@supabase/supabase-js'
 import type { BaMasterList, ManningList } from '@/types/database'
 
 export const getDutySheet = async (date: string) => {
