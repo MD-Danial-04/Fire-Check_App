@@ -264,7 +264,7 @@ export default function ManningList() {
       <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
         <div className="grid grid-cols-4 gap-4">
           {standardPositions.map(position => (
-            <div key={position} className="space-y-2">
+            <div key={position} className="space-y-4">
               <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
                 {position}
               </div>
@@ -282,14 +282,14 @@ export default function ManningList() {
     // Define positions for each row
     const firstRowPositions = ['OOW', 'ENG/EMT', 'STEERSMAN'];
     const secondRowPositions = ['NAV', 'FF1', 'FF2'];
-    
+
     return (
       <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
         
         {/* First Row */}
         <div className="grid grid-cols-3 gap-4 mb-6">
           {firstRowPositions.map(position => (
-            <div key={position} className="space-y-2">
+            <div key={position} className="space-y-4">
               <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
                 {position}
               </div>
@@ -303,7 +303,7 @@ export default function ManningList() {
         {/* Second Row */}
         <div className="grid grid-cols-3 gap-4">
           {secondRowPositions.map(position => (
-            <div key={position} className="space-y-2">
+            <div key={position} className="space-y-4">
               <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
                 {position}
               </div>
@@ -312,7 +312,7 @@ export default function ManningList() {
               </div>
             </div>
           ))}
-        </div>
+                    </div>
       </div>
     );
   };
@@ -442,126 +442,129 @@ export default function ManningList() {
 
       <div className="max-w-[1920px] mx-auto relative">
         {/* Header */}
-        <header className="px-6 pt-6 pb-6 border-b border-gray-200 dark:border-[#FCF6EC]/20">
-          <div className="max-w-7xl mx-auto">
-            <div className="flex items-center justify-between mb-6">
-              <div className="space-y-1">
-                <span className="text-[10px] tracking-[0.2em] text-gray-500 uppercase block">Fire Check</span>
-                <h1 className="text-[32px] font-normal tracking-[-0.02em] text-gray-900 dark:text-[#FCF6EC] uppercase">Manning List</h1>
-              </div>
-              <span className="text-[10px] tracking-[0.2em] text-gray-500 dark:text-[#FCF6EC]/60 uppercase">Personnel Duty Roster</span>
+        <header className="px-6 pt-6 pb-8 border-b border-gray-200 dark:border-[#FCF6EC]/20">
+          <div className="flex items-center justify-between mb-12 max-w-7xl mx-auto">
+            <div className="space-y-0.5">
+              <span className="text-[10px] tracking-[0.2em] text-gray-500 uppercase block">Fire Check</span>
+              <h1 className="text-[32px] font-normal tracking-[-0.02em] text-gray-900 dark:text-[#FCF6EC] uppercase">Manning List</h1>
             </div>
-            
-            {/* Stats Overview - Moved above search bar */}
-            <div className="grid grid-cols-4 gap-16 max-w-7xl mx-auto py-6 mb-6">
-              <StatCard title="TOTAL STRENGTH" value={stats?.total_strength.toString() || '0'} />
-              <StatCard title="CURRENT DUTY OPS" value={stats?.current_duty_ops.toString() || '0'} />
-              <StatCard title="ON LEAVE" value={stats?.leave_count.toString() || '0'} />
-              <StatCard title="COURSE/MC" value={stats?.mc_count.toString() || '0'} />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                <Input 
-                  type="search" 
-                  placeholder="Search personnel..." 
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900"
-                />
-              </div>
+            <span className="text-[10px] tracking-[0.2em] text-gray-500 dark:text-[#FCF6EC]/60 uppercase">Personnel Duty Roster</span>
+          </div>
+          
+          {/* Stats Overview */}
+          <div className="grid grid-cols-4 gap-24 max-w-7xl mx-auto">
+            <StatCard title="TOTAL STRENGTH" value={stats?.total_strength.toString() || '0'} />
+            <StatCard title="CURRENT DUTY OPS" value={stats?.current_duty_ops.toString() || '0'} />
+            <StatCard title="ON LEAVE" value={stats?.leave_count.toString() || '0'} />
+            <StatCard title="COURSE/MC" value={stats?.mc_count.toString() || '0'} />
+          </div>
+        </header>
 
-              <div className="flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={dateFilter}
-                  onChange={handleDateChange}
-                  className="w-[160px] bg-neutral-50 dark:bg-[#1C1917] border-0 focus-visible:ring-neutral-900 text-xs font-['Azeret_Mono']"
-                />
-                
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button 
-                      variant="outline"
-                      className="h-8 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1"
-                    >
-                      <Users className="h-3.5 w-3.5" />
-                      <span>Personnel</span>
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>Personnel List</DialogTitle>
-                    </DialogHeader>
-                    <PersonnelList personnel={personnel} />
-                  </DialogContent>
-                </Dialog>
+        {/* Main Content */}
+        <main className="px-6 pb-6">
+          {/* Search and Actions */}
+          <div className="flex items-center justify-between gap-6 py-6 max-w-7xl mx-auto">
+            <div className="relative w-[480px]">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+            <Input 
+              type="search" 
+              placeholder="Search personnel..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900 h-9"
+            />
+          </div>
 
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button 
-                      variant="outline"
-                      className="h-8 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1"
+            <div className="flex items-center gap-4">
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={handleDateChange}
+                className="w-[160px] bg-neutral-50 dark:bg-[#1C1917] border-0 focus-visible:ring-neutral-900 text-xs font-['Azeret_Mono'] h-9"
+              />
+              
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="outline"
+                    className="h-9 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1"
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    <span>Personnel</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Personnel List</DialogTitle>
+                  </DialogHeader>
+                  <PersonnelList personnel={personnel} />
+                </DialogContent>
+              </Dialog>
+
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button 
+                    variant="outline"
+                    className="h-9 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1"
+                  >
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      width="14" 
+                      height="14" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="currentColor" 
+                      strokeWidth="2" 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      className="text-gray-900 dark:text-[#FCF6EC]"
                     >
-                      <svg 
-                        xmlns="http://www.w3.org/2000/svg" 
-                        width="14" 
-                        height="14" 
-                        viewBox="0 0 24 24" 
-                        fill="none" 
-                        stroke="currentColor" 
-                        strokeWidth="2" 
-                        strokeLinecap="round" 
-                        strokeLinejoin="round" 
-                        className="text-gray-900 dark:text-[#FCF6EC]"
-                      >
-                        <line x1="18" y1="20" x2="18" y2="10"></line>
-                        <line x1="12" y1="20" x2="12" y2="4"></line>
-                        <line x1="6" y1="20" x2="6" y2="14"></line>
-                      </svg>
-                      <span>Stats</span>
+                      <line x1="18" y1="20" x2="18" y2="10"></line>
+                      <line x1="12" y1="20" x2="12" y2="4"></line>
+                      <line x1="6" y1="20" x2="6" y2="14"></line>
+                    </svg>
+                    <span>Stats</span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Manning Statistics</DialogTitle>
+                  </DialogHeader>
+                  <ManningStatistics statistics={stats as DailyStatistics} />
+                </DialogContent>
+              </Dialog>
+              
+              <Button 
+                className="bg-neutral-900 hover:bg-neutral-800 dark:bg-[#2E2521] dark:hover:bg-[#2E2521]/80 font-['Azeret_Mono'] h-9 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1"
+              >
+                <Plus className="h-4 w-4 text-white dark:text-[#FCF6EC]" /> 
+                <span className="text-white dark:text-[#FCF6EC]">Add Personnel</span>
           </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>Manning Statistics</DialogTitle>
-                    </DialogHeader>
-                    <ManningStatistics statistics={stats as DailyStatistics} />
-                  </DialogContent>
-                </Dialog>
-                
-                <Button 
-                  className="bg-neutral-900 hover:bg-neutral-800 dark:bg-[#2E2521] dark:hover:bg-[#2E2521]/80 font-['Azeret_Mono'] h-9 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1"
-                >
-                  <Plus className="h-4 w-4 text-white dark:text-[#FCF6EC]" /> 
-                  <span className="text-white dark:text-[#FCF6EC]">Add Personnel</span>
-                </Button>
-              </div>
-            </div>
-            
-            {/* Duty Info - Moved below search bar */}
-            <div className="max-w-7xl mx-auto mt-6 mb-4">
-              <Card className="shadow-sm border border-gray-200 dark:border-[#FCF6EC]/20 bg-white dark:bg-[#2E2521]">
-                <CardContent className="pt-4 pb-2">
-                  <div className="grid gap-2 md:grid-cols-2">
-                <div>
-                      <h2 className="text-xs font-medium text-gray-500 dark:text-[#FCF6EC]/60 mb-1">
-                        Duty Section Commander
-                      </h2>
-                      <p className="text-sm font-medium text-gray-900 dark:text-[#FCF6EC]">
-                        {dutyInfo?.duty_section_commander || '-'}
-                      </p>
                 </div>
-                <div>
-                      <h2 className="text-xs font-medium text-gray-500 dark:text-[#FCF6EC]/60 mb-1">
-                        Duty Date
-                      </h2>
-                      <p className="text-sm font-medium text-gray-900 dark:text-[#FCF6EC]">
+              </div>
+          
+          {/* Duty Info Card */}
+          <div className="max-w-7xl mx-auto mb-8">
+            <Card className="shadow-sm border border-gray-200 dark:border-[#FCF6EC]/20 bg-white dark:bg-[#2E2521]">
+              <CardContent className="pt-6 pb-4">
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <h2 className="text-sm font-normal text-gray-500 dark:text-[#FCF6EC]/60 mb-2">
+                      Duty Section Commander
+                    </h2>
+                    <p className="text-sm font-normal text-gray-900 dark:text-[#FCF6EC]">
+                      {dutyInfo?.duty_section_commander || '-'}
+                    </p>
+                </div>
+                  <div className="space-y-2">
+                    <h2 className="text-sm font-normal text-gray-500 dark:text-[#FCF6EC]/60 mb-2">
+                      Duty Date
+                    </h2>
+                    <p className="text-sm font-normal text-gray-900 dark:text-[#FCF6EC]">
                     {dutyInfo?.date ? new Date(dutyInfo.date).toLocaleDateString('en-GB', {
-                          weekday: 'short',
-                          day: 'numeric',
-                          month: 'short',
+                        weekday: 'short',
+                        day: 'numeric',
+                        month: 'short',
                       year: 'numeric'
                     }) : '-'}
                   </p>
@@ -569,134 +572,180 @@ export default function ManningList() {
               </div>
             </CardContent>
           </Card>
-            </div>
           </div>
-        </header>
 
-        {/* Main Content */}
-        <main className="px-6 pb-6 mt-4">
-          {/* Vehicle Assignments Section - Updated styling to match BA List */}
-          <div className="space-y-6">
+          {/* Vehicle Assignments */}
+          <div className="space-y-6 max-w-7xl mx-auto">
             {Object.entries(assignments).map(([vehicleType, vehicleAssignments]) => (
-              <div key={vehicleType} className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
-                <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
+              <div key={vehicleType} className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20 shadow-sm">
+                <h3 className="text-sm tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-6 py-4 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white dark:bg-[#2E2521]">
                   {vehicleType}
                 </h3>
                 <div className="p-4">
                 {vehicleType === 'MRV811' ? (
                     <div className="space-y-4">
                       {/* Duty Officer Card */}
-                      <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                        <div className="space-y-4">
+                          <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                             DUTY OFFICER
                           </span>
-                        </div>
-                        <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px]">
-                          {vehicleAssignments.find(a => a.section === 'COMMAND' && a.position === 'Duty Officer')?.personnel_name || '-'}
+                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
+                            {vehicleAssignments.find(a => a.section === 'COMMAND' && a.position === 'Duty Officer')?.personnel_name || '-'}
+                          </span>
                         </div>
                       </div>
-                      
-                      {/* Bridge Crew Section */}
-                      <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+
+                      {/* Bridge Crew Cards */}
+                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                        <div className="flex items-center justify-between mb-5">
+                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase font-medium">
                             BRIDGE CREW
                           </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-4 gap-6">
                           {['OOW', 'ENG/EMT', 'STEERSMAN', 'NAV SPEC'].map(position => (
-                            <div key={position} className="space-y-2">
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                            <div key={position} className="space-y-4">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                                 {position}
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px]">
+                              </span>
+                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
                                 {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === position)?.personnel_name || '-'}
-                              </div>
+                              </span>
                             </div>
                           ))}
                         </div>
                       </div>
-                      
-                      {/* Section 1 */}
-                      <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+
+                      {/* Section 1 Cards */}
+                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                        <div className="flex items-center justify-between mb-5">
+                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase font-medium">
                             SECTION 1 (FIREFIGHTING CREW)
                           </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-4 gap-6">
                           {['SC', 'FF1', 'FF2', 'FF3'].map(position => (
-                            <div key={position} className="space-y-2">
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                            <div key={position} className="space-y-4">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                                 {position}
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px]">
+                              </span>
+                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
                                 {vehicleAssignments.find(a => a.section === 'SECTION 1' && a.position === position)?.personnel_name || '-'}
-                              </div>
+                              </span>
                             </div>
                           ))}
                         </div>
                       </div>
-                      
-                      {/* Section 2 */}
-                      <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+
+                      {/* Section 2 Cards */}
+                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                        <div className="flex items-center justify-between mb-5">
+                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase font-medium">
                             SECTION 2 (DECK CREW / MOORING PARTY)
                           </span>
                         </div>
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-4 gap-6">
                           {['FF1', 'FF2', 'FF3'].map(position => (
-                            <div key={position} className="space-y-2">
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                            <div key={position} className="space-y-4">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                                 {position}
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px]">
+                              </span>
+                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
                                 {vehicleAssignments.find(a => a.section === 'SECTION 2' && a.position === position)?.personnel_name || '-'}
-                              </div>
+                              </span>
                             </div>
                           ))}
                         </div>
                       </div>
-                      
-                      {/* Section 3 */}
-                      <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+
+                      {/* Section 3 Cards */}
+                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                        <div className="flex items-center justify-between mb-5">
+                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase font-medium">
                             SECTION 3 (RESCUE & EVACUATION TEAM)
                           </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-4 gap-6">
                           {['SC', 'FF1', 'FF2', 'FF3'].map(position => (
-                            <div key={position} className="space-y-2">
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                            <div key={position} className="space-y-4">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                                 {position}
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px]">
+                              </span>
+                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
                                 {vehicleAssignments.find(a => a.section === 'SECTION 3' && a.position === position)?.personnel_name || '-'}
-                              </div>
+                              </span>
                             </div>
                           ))}
                         </div>
                       </div>
                     </div>
                   ) : vehicleType === 'LF811' || vehicleType === 'LF812' ? (
-                    renderRegularVehicle(vehicleType, vehicleAssignments)
-                  ) : vehicleType === 'RFV811' ? (
-                    renderRFV811(vehicleAssignments)
-                  ) : (
-                    <div className="grid grid-cols-1 gap-4">
-                      <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                        <div className="grid grid-cols-4 gap-4">
-                          {Array.from(new Set(vehicleAssignments.map(a => a.position))).map(position => (
-                            <div key={position} className="space-y-2">
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                    <div className="space-y-4">
+                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                        <div className="grid grid-cols-4 gap-6">
+                          {['SC', 'PO', 'FF1', 'FF2'].map(position => (
+                            <div key={position} className="space-y-4">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                                 {position}
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px]">
+                              </span>
+                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
                                 {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
-                              </div>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : vehicleType === 'RFV811' ? (
+                    <div className="space-y-4">
+                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                        {/* First Row */}
+                        <div className="grid grid-cols-3 gap-6 mb-6">
+                          {['OOW', 'ENG/EMT', 'STEERSMAN'].map(position => (
+                            <div key={position} className="space-y-4">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                {position}
+                              </span>
+                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
+                                {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        
+                        {/* Second Row */}
+                        <div className="grid grid-cols-3 gap-6">
+                          {['NAV', 'FF1', 'FF2'].map(position => (
+                            <div key={position} className="space-y-4">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                {position}
+                              </span>
+                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
+                                {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                        <div className="flex items-center justify-between mb-5">
+                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase font-medium">
+                            CREW ASSIGNMENTS
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-6">
+                          {Array.from(new Set(vehicleAssignments.map(a => a.position))).map(position => (
+                            <div key={position} className="space-y-4">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                {position}
+                              </span>
+                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
+                                {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -715,9 +764,9 @@ export default function ManningList() {
 
 function StatCard({ title, value }: { title: string; value: string }) {
   return (
-    <div className="space-y-1">
-      <p className="text-xs font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">{title}</p>
-      <p className="text-2xl font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{value}</p>
+    <div className="bg-white dark:bg-[#2E2521] p-6 rounded-md border border-gray-200 dark:border-[#FCF6EC]/20 shadow-sm">
+      <p className="text-xs font-['Azeret_Mono'] font-normal text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em] mb-2">{title}</p>
+      <p className="text-3xl font-['Azeret_Mono'] font-normal text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{value}</p>
     </div>
   );
 }

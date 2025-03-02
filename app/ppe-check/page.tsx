@@ -449,7 +449,7 @@ export default function PPECheck() {
             <Button className="bg-neutral-900 hover:bg-neutral-800 dark:bg-[#2E2521] dark:hover:bg-[#2E2521]/80 font-['Azeret_Mono'] h-9 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1">
               <Plus className="h-4 w-4 text-white dark:text-[#FCF6EC]" /> 
               <span className="text-white dark:text-[#FCF6EC]">Add Personnel</span>
-            </Button>
+          </Button>
           </div>
         </div>
       </header>
