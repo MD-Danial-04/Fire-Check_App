@@ -340,8 +340,7 @@ export default function ManningList() {
       {
         title: "SECTION 2",
         displayTitle: "SECTION 2 (DECK CREW / MOORING PARTY)",
-        positions: ["FF1", "FF2", "FF3", "FF4", "FF5", "FF6"],
-        positionMap: { "SC": "FF1" }
+        positions: ["SC", "FF1", "FF2", "FF3", "FF4", "FF5", "FF6"]
       },
       {
         title: "SECTION 3",
@@ -646,7 +645,7 @@ export default function ManningList() {
                           </span>
                         </div>
                         <div className="grid grid-cols-4 gap-6">
-                          {['FF1', 'FF2', 'FF3'].map(position => (
+                          {['SC', 'FF1', 'FF2', 'FF3'].map(position => (
                             <div key={position} className="space-y-4">
                               <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                                 {position}
