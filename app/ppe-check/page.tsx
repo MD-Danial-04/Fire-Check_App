@@ -474,23 +474,23 @@ export default function PPECheck() {
                     <Table className="table-fixed w-full">
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[25%]">Name</TableHead>
-                          <TableHead className="w-[15%]">Vessel Backplate</TableHead>
-                          <TableHead className="w-[15%]">Vessel Cylinder</TableHead>
-                          <TableHead className="w-[15%]">LFAV Backplate</TableHead>
-                          <TableHead className="w-[15%]">LFAV Cylinder</TableHead>
-                          <TableHead className="w-[15%]">Actions</TableHead>
+                          <TableHead className="w-[20%]">Name</TableHead>
+                          <TableHead className="w-[16%]">Vessel Backplate</TableHead>
+                          <TableHead className="w-[16%]">Vessel Cylinder</TableHead>
+                          <TableHead className="w-[16%]">LFAV Backplate</TableHead>
+                          <TableHead className="w-[16%]">LFAV Cylinder</TableHead>
+                          <TableHead className="w-[16%]">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {personnel.map((person) => (
                           <TableRow key={person.name}>
-                            <TableCell className="w-[25%]">{person.name}</TableCell>
-                            <TableCell className="w-[15%]">{person.vessel_backplate || '-'}</TableCell>
-                            <TableCell className="w-[15%]">{person.vessel_cylinder || '-'}</TableCell>
-                            <TableCell className="w-[15%]">{person.lfav_backplate || '-'}</TableCell>
-                            <TableCell className="w-[15%]">{person.lfav_cylinder || '-'}</TableCell>
-                            <TableCell className="w-[15%]">
+                            <TableCell className="w-[20%]">{person.name}</TableCell>
+                            <TableCell className="w-[16%]">{person.vessel_backplate || '-'}</TableCell>
+                            <TableCell className="w-[16%]">{person.vessel_cylinder || '-'}</TableCell>
+                            <TableCell className="w-[16%]">{person.lfav_backplate || '-'}</TableCell>
+                            <TableCell className="w-[16%]">{person.lfav_cylinder || '-'}</TableCell>
+                            <TableCell className="w-[16%]">
                               <div className="flex gap-2">
                                 <Button
                                   variant="outline"
