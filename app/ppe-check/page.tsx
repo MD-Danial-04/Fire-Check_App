@@ -370,26 +370,34 @@ export default function PPECheck() {
       // Prepare BA sets based on vehicle assignments
       const baSets: any = {};
       
-      // Check for vessel (MRV/RFV) assignment and BA set
-      if (assignments.some(a => a.vehicle_type.includes('MRV') || a.vehicle_type.includes('RFV')) && 
-          person.vessel_backplate && person.vessel_cylinder) {
-        const vesselType = assignments.find(a => a.vehicle_type.includes('MRV') || a.vehicle_type.includes('RFV'))?.vehicle_type;
-        baSets.vessel = {
-          appliance: vesselType?.replace(/(\d+)/, ' $1'), // Add space before numbers (MRV811 -> MRV 811)
-          backplate: person.vessel_backplate,
-          cylinder: person.vessel_cylinder
-        };
+      // Check for vessel (MRV/RFV) assignment
+      const vesselAssignment = assignments.find(a => a.vehicle_type.includes('MRV') || a.vehicle_type.includes('RFV'));
+      if (vesselAssignment) {
+        const vesselType = vesselAssignment.vehicle_type.replace(/(\d+)/, ' $1'); // Add space before numbers
+        if (person.vessel_backplate && person.vessel_cylinder) {
+          baSets.vessel = {
+            appliance: vesselType,
+            backplate: person.vessel_backplate,
+            cylinder: person.vessel_cylinder
+          };
+        } else {
+          baSets.vesselType = vesselType;
+        }
       }
       
-      // Check for LF assignment and BA set
-      if (assignments.some(a => a.vehicle_type.includes('LF')) && 
-          person.lfav_backplate && person.lfav_cylinder) {
-        const lfType = assignments.find(a => a.vehicle_type.includes('LF'))?.vehicle_type;
-        baSets.lf = {
-          appliance: lfType?.replace(/(\d+)/, ' $1'), // Add space before numbers (LF811 -> LF 811)
-          backplate: person.lfav_backplate,
-          cylinder: person.lfav_cylinder
-        };
+      // Check for LF assignment
+      const lfAssignment = assignments.find(a => a.vehicle_type.includes('LF'));
+      if (lfAssignment) {
+        const lfType = lfAssignment.vehicle_type.replace(/(\d+)/, ' $1'); // Add space before numbers
+        if (person.lfav_backplate && person.lfav_cylinder) {
+          baSets.lf = {
+            appliance: lfType,
+            backplate: person.lfav_backplate,
+            cylinder: person.lfav_cylinder
+          };
+        } else {
+          baSets.lfType = lfType;
+        }
       }
 
       const response = await fetch('/api/fill-form', {
@@ -557,11 +565,15 @@ export default function PPECheck() {
                 <p className="text-sm font-medium">Pre-filled information:</p>
                 <ul className="text-sm text-muted-foreground list-disc pl-5">
                   <li>Name: {selectedPerson?.name}</li>
-                  {selectedPerson?.vessel_backplate && selectedPerson?.vessel_cylinder && (
+                  {selectedPerson?.vessel_backplate && selectedPerson?.vessel_cylinder ? (
                     <li>Vessel BA Set: {selectedPerson.vessel_backplate} / {selectedPerson.vessel_cylinder}</li>
+                  ) : prefilledUrl.includes('vesselType=') && (
+                    <li>Vessel BA Set: N.A</li>
                   )}
-                  {selectedPerson?.lfav_backplate && selectedPerson?.lfav_cylinder && (
+                  {selectedPerson?.lfav_backplate && selectedPerson?.lfav_cylinder ? (
                     <li>LFAV BA Set: {selectedPerson.lfav_backplate} / {selectedPerson.lfav_cylinder}</li>
+                  ) : prefilledUrl.includes('lfType=') && (
+                    <li>LFAV BA Set: N.A</li>
                   )}
                 </ul>
                 <p className="text-sm text-muted-foreground mt-2">

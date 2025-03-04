@@ -20,15 +20,23 @@ export async function POST(request: Request) {
       params.append(FIELD_IDS.name, data.name);
     }
 
-    // Add vessel BA set if available
+    // Add vessel BA set if available, or N.A if person has vehicle but no BA
     if (data.baSets?.vessel) {
       const vesselSet = `${data.baSets.vessel.appliance} / ${data.baSets.vessel.backplate} / ${data.baSets.vessel.cylinder}`;
       params.append(FIELD_IDS.vessel, vesselSet);
+    } else if (data.baSets?.vesselType) {
+      // Person has vehicle assignment but no BA set
+      const vesselSet = `${data.baSets.vesselType} / N.A / N.A`;
+      params.append(FIELD_IDS.vessel, vesselSet);
     }
 
-    // Add LFAV BA set if available
+    // Add LFAV BA set if available, or N.A if person has LFAV but no BA
     if (data.baSets?.lf) {
       const lfSet = `${data.baSets.lf.appliance} / ${data.baSets.lf.backplate} / ${data.baSets.lf.cylinder}`;
+      params.append(FIELD_IDS.lfav, lfSet);
+    } else if (data.baSets?.lfType) {
+      // Person has LFAV assignment but no BA set
+      const lfSet = `${data.baSets.lfType} / N.A / N.A`;
       params.append(FIELD_IDS.lfav, lfSet);
     }
 
