@@ -13,8 +13,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { fillForm } from '../services/formAutomation';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
 
 interface Personnel {
   id: string;
@@ -55,6 +56,10 @@ export default function PPECheck() {
   const [groupedPersonnel, setGroupedPersonnel] = useState<GroupedPersonnel[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [prefilledUrl, setPrefilledUrl] = useState("");
+  const [selectedPerson, setSelectedPerson] = useState<GroupedPersonnel | null>(null);
+  const { toast } = useToast();
 
   // Define the exact grouping order
   const groupingOrder = ["REGULARS", "NS SECTION COMMANDER", "NS MARINE FIREFIGHTER", "ORNS/VES"];
@@ -340,6 +345,7 @@ export default function PPECheck() {
   }, {});
 
   const handleFormFill = async (person: GroupedPersonnel) => {
+    setSelectedPerson(person);
     const today = new Date();
     const formattedDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
     
@@ -353,33 +359,34 @@ export default function PPECheck() {
       if (error) throw error;
       
       if (!assignments?.length) {
-        alert('No vehicle assignments found for this person');
+        toast({
+          title: "No Assignments Found",
+          description: "No vehicle assignments found for this person",
+          variant: "destructive",
+        });
         return;
       }
-
-      // Determine manning type based on number of BA sets
-      const hasMRVSet = Boolean(person.vessel_backplate && person.vessel_cylinder);
-      const hasLFAVSet = Boolean(person.lfav_backplate && person.lfav_cylinder);
-      const totalSets = Number(hasMRVSet) + Number(hasLFAVSet);
-      const manningType = totalSets > 1 ? 'DOUBLE MANNING' : 'SINGLE MANNING';
-
-      // Get actual appliances from assignments
-      const appliances = assignments.map(a => a.vehicle_type);
 
       // Prepare BA sets based on vehicle assignments
       const baSets: any = {};
       
       // Check for vessel (MRV/RFV) assignment and BA set
-      if (assignments.some(a => a.vehicle_type.includes('MRV') || a.vehicle_type.includes('RFV')) && hasMRVSet) {
+      if (assignments.some(a => a.vehicle_type.includes('MRV') || a.vehicle_type.includes('RFV')) && 
+          person.vessel_backplate && person.vessel_cylinder) {
+        const vesselType = assignments.find(a => a.vehicle_type.includes('MRV') || a.vehicle_type.includes('RFV'))?.vehicle_type;
         baSets.vessel = {
+          appliance: vesselType?.replace(/(\d+)/, ' $1'), // Add space before numbers (MRV811 -> MRV 811)
           backplate: person.vessel_backplate,
           cylinder: person.vessel_cylinder
         };
       }
       
       // Check for LF assignment and BA set
-      if (assignments.some(a => a.vehicle_type.includes('LF')) && hasLFAVSet) {
+      if (assignments.some(a => a.vehicle_type.includes('LF')) && 
+          person.lfav_backplate && person.lfav_cylinder) {
+        const lfType = assignments.find(a => a.vehicle_type.includes('LF'))?.vehicle_type;
         baSets.lf = {
+          appliance: lfType?.replace(/(\d+)/, ' $1'), // Add space before numbers (LF811 -> LF 811)
           backplate: person.lfav_backplate,
           cylinder: person.lfav_cylinder
         };
@@ -392,10 +399,6 @@ export default function PPECheck() {
         },
         body: JSON.stringify({
           name: person.name,
-          date: formattedDate,
-          rota: 'ROTA 2',
-          manning: manningType,
-          appliances,
           baSets
         })
       });
@@ -403,13 +406,39 @@ export default function PPECheck() {
       const result = await response.json();
 
       if (result.success) {
-        alert(result.message);
+        // Show dialog with pre-filled URL
+        setPrefilledUrl(result.url);
+        setIsDialogOpen(true);
       } else {
-        alert('Failed to fill form: ' + result.message);
+        toast({
+          title: "Error",
+          description: result.message || "Failed to generate form URL",
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      console.error('Error filling form:', error);
-      alert('Failed to fill form. Please try again or fill manually.');
+      console.error('Error generating form URL:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate form URL. Please try again or fill manually.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(prefilledUrl);
+      toast({
+        title: "Copied!",
+        description: "Form URL copied to clipboard",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to copy URL to clipboard",
+        variant: "destructive",
+      });
     }
   };
 
@@ -513,6 +542,55 @@ export default function PPECheck() {
           )}
         </div>
       </main>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Form Pre-filled</DialogTitle>
+            <DialogDescription>
+              A link has been created with pre-filled information for {selectedPerson?.name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="flex items-center space-x-2">
+              <div className="grid flex-1 gap-2">
+                <p className="text-sm font-medium">Pre-filled information:</p>
+                <ul className="text-sm text-muted-foreground list-disc pl-5">
+                  <li>Name: {selectedPerson?.name}</li>
+                  {selectedPerson?.vessel_backplate && selectedPerson?.vessel_cylinder && (
+                    <li>Vessel BA Set: {selectedPerson.vessel_backplate} / {selectedPerson.vessel_cylinder}</li>
+                  )}
+                  {selectedPerson?.lfav_backplate && selectedPerson?.lfav_cylinder && (
+                    <li>LFAV BA Set: {selectedPerson.lfav_backplate} / {selectedPerson.lfav_cylinder}</li>
+                  )}
+                </ul>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Note: You will still need to fill in the remaining fields manually.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+            <Button
+              type="button"
+              variant="default"
+              className="w-full sm:w-auto"
+              onClick={() => window.open(prefilledUrl, '_blank')}
+            >
+              Open Form
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={copyToClipboard}
+            >
+              <Copy className="h-4 w-4 mr-2" />
+              Copy URL
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 
