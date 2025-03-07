@@ -19,6 +19,7 @@ import ManningStatistics from "../components/manning/ManningStatistics"
 import { DailyStatistics } from "../types/manning"
 import PersonnelList from "../components/manning/PersonnelList"
 import { cn } from "@/lib/utils"
+import { ResponsiveTable } from "@/components/ui/responsive-table"
 
 // Types
 interface DutyInfo {
@@ -73,6 +74,8 @@ export default function ManningList() {
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
   const [personnel, setPersonnel] = useState<Personnel[]>([])
   const [view, setView] = useState<'list' | 'grouped'>('grouped')
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
+  const [showMobileDate, setShowMobileDate] = useState(false);
   
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -261,16 +264,76 @@ export default function ManningList() {
     const standardPositions = ['SC', 'PO', 'FF1', 'FF2'];
 
     return (
-      <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-        <div className="grid grid-cols-4 gap-4">
+      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+        {/* Mobile View */}
+        <div className="md:hidden space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                SC
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'SC')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'SC')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                PO
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'PO')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'PO')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                FF1
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'FF1')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'FF1')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                FF2
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'FF2')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'FF2')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Desktop View */}
+        <div className="hidden md:grid grid-cols-4 gap-6">
           {standardPositions.map(position => (
             <div key={position} className="space-y-4">
-              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                 {position}
-              </div>
-              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px]">
+              </span>
+              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
                 {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
-              </div>
+              </span>
             </div>
           ))}
         </div>
@@ -284,32 +347,117 @@ export default function ManningList() {
     const secondRowPositions = ['NAV', 'FF1', 'FF2'];
 
     return (
-      <div className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-        
-        {/* First Row */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
+        {/* Mobile View */}
+        <div className="md:hidden space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                OOW
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'OOW')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'OOW')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                ENG/EMT
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'ENG/EMT')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'ENG/EMT')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                STEERSMAN
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'STEERSMAN')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'STEERSMAN')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                NAV
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'NAV')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'NAV')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                FF1
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'FF1')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'FF1')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                FF2
+              </span>
+              <div className="flex flex-col">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'FF2')?.personnel_name?.split(' ')[0] || '-'}
+                </span>
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                  {vehicleAssignments.find(a => a.position === 'FF2')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Desktop View - First Row */}
+        <div className="hidden md:grid grid-cols-3 gap-6 mb-6">
           {firstRowPositions.map(position => (
             <div key={position} className="space-y-4">
-              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                 {position}
-              </div>
-              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px]">
+              </span>
+              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
                 {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
-              </div>
+              </span>
             </div>
           ))}
         </div>
-        
-        {/* Second Row */}
-        <div className="grid grid-cols-3 gap-4">
+        {/* Desktop View - Second Row */}
+        <div className="hidden md:grid grid-cols-3 gap-6">
           {secondRowPositions.map(position => (
             <div key={position} className="space-y-4">
-              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                 {position}
-              </div>
-              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px]">
+              </span>
+              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
                 {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
-              </div>
+              </span>
             </div>
           ))}
                     </div>
@@ -318,117 +466,84 @@ export default function ManningList() {
   };
 
   const renderMRV811Sections = (assignments: VehicleAssignment[]) => {
-    // Debug logs
-    console.log('All MRV811 assignments:', assignments);
-    
-    // Filter assignments by section
-    const commandAssignments = assignments.filter(a => a.section === 'COMMAND');
-    const nonCommandAssignments = assignments.filter(a => a.section !== 'COMMAND');
-    
-    // Define all required sections with their titles and positions
-    const requiredSections: SectionDefinition[] = [
-      {
-        title: "BRIDGE",
-        displayTitle: "BRIDGE CREW",
-        positions: ["OOW", "ENG/EMT", "STEERSMAN", "NAV SPEC"]
+    // Define the sections and their positions
+    const sections: Record<MRVSection, SectionDefinition> = {
+      'COMMAND': {
+        title: 'COMMAND',
+        displayTitle: 'COMMAND',
+        positions: ['OIC', 'DCOM', 'WATCHKEEPER'],
+        positionMap: {
+          'OIC': 'OIC',
+          'DCOM': 'DCOM',
+          'WATCHKEEPER': 'WATCHKEEPER'
+        }
       },
-      {
-        title: "SECTION 1",
-        displayTitle: "SECTION 1 (FIREFIGHTING CREW)",
-        positions: ["SC", "FF1", "FF2", "FF3", "FF4", "FF5"]
+      'BRIDGE': {
+        title: 'BRIDGE',
+        displayTitle: 'BRIDGE',
+        positions: ['STEERSMAN', 'NAV', 'COMMS'],
+        positionMap: {
+          'STEERSMAN': 'STEERSMAN',
+          'NAV': 'NAV',
+          'COMMS': 'COMMS'
+        }
       },
-      {
-        title: "SECTION 2",
-        displayTitle: "SECTION 2 (DECK CREW / MOORING PARTY)",
-        positions: ["SC", "FF1", "FF2", "FF3", "FF4", "FF5", "FF6"]
+      'FIREFIGHTING': {
+        title: 'FIREFIGHTING',
+        displayTitle: 'FIREFIGHTING',
+        positions: ['TEAM LEADER', 'FF1', 'FF2', 'FF3', 'FF4'],
+        positionMap: {
+          'TEAM LEADER': 'TEAM LEADER',
+          'FF1': 'FF1',
+          'FF2': 'FF2',
+          'FF3': 'FF3',
+          'FF4': 'FF4'
+        }
       },
-      {
-        title: "SECTION 3",
-        displayTitle: "SECTION 3 (RESCUE & EVACUATION TEAM)",
-        positions: ["SC", "FF1", "FF2", "FF3", "FF4", "FF5"]
+      'DECK': {
+        title: 'DECK',
+        displayTitle: 'DECK',
+        positions: ['DECK IC', 'PUMP OP', 'DECK HAND'],
+        positionMap: {
+          'DECK IC': 'DECK IC',
+          'PUMP OP': 'PUMP OP',
+          'DECK HAND': 'DECK HAND'
+        }
+      },
+      'RESCUE': {
+        title: 'RESCUE',
+        displayTitle: 'RESCUE',
+        positions: ['RESCUE IC', 'RESCUE 1', 'RESCUE 2'],
+        positionMap: {
+          'RESCUE IC': 'RESCUE IC',
+          'RESCUE 1': 'RESCUE 1',
+          'RESCUE 2': 'RESCUE 2'
+        }
       }
-    ];
+    };
 
     return (
-      <div className="border border-neutral-200 dark:border-[#FCF6EC]/20 rounded-md overflow-hidden">
-        <div className="bg-gray-100 dark:bg-[#2E2521] px-4 py-2">
-          <h3 className="font-semibold">Red Dolphin MRV811</h3>
+      <div className="space-y-6">
+        {Object.entries(sections).map(([sectionKey, section]) => (
+          <div key={sectionKey} className="p-3 border border-gray-200 dark:border-neutral-800 rounded-lg bg-white dark:bg-neutral-900 shadow-sm">
+            <h3 className="text-sm font-medium mb-4">{section.displayTitle}</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              {section.positions.map(position => (
+                <div key={position} className="space-y-2">
+                  <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                    {position}
             </div>
-        <div className="space-y-3 p-3">
-          {/* Commander Section */}
-          <div className="rounded-md overflow-hidden">
-            <div className="border border-neutral-200 dark:border-[#FCF6EC]/10">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-white dark:bg-[#2E2521] border-b border-neutral-200 dark:border-[#FCF6EC]/20">
-                    <TableHead className="py-2 px-3 text-xs font-medium text-neutral-600 dark:text-[#FCF6EC]/70">
-                      Duty Officer
-                      </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow className="hover:bg-neutral-50 dark:hover:bg-[#FCF6EC]/5">
-                    <TableCell className="px-3 py-2">
-                      <div className="text-xs text-neutral-900 dark:text-[#FCF6EC]">
-                        {commandAssignments.find(a => a.position === 'Duty Officer')?.personnel_name || '-'}
+                  <div className="text-sm font-medium">
+                    {assignments.find(a => 
+                      a.section === sectionKey && 
+                      a.position === (section.positionMap?.[position] || position)
+                    )?.personnel_name || '-'}
                       </div>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
             </div>
+              ))}
           </div>
-
-          {/* Required Sections */}
-          {requiredSections.map((section) => {
-            // Get assignments for this section
-            const sectionAssignments = nonCommandAssignments.filter(a => a.section === section.title);
-            
-            // Get positions that have assignments
-            const filledPositions = section.positions.filter(pos => {
-              const searchPos = section.positionMap?.[pos] || pos;
-              return sectionAssignments.some(a => a.position === searchPos);
-            });
-
-            return (
-              <div key={section.title} className="rounded-md overflow-hidden">
-                <div className="bg-gray-100 dark:bg-[#2E2521] px-4 py-2">
-                  <h4 className="text-xs font-medium text-neutral-900 dark:text-[#FCF6EC]">
-                    {section.displayTitle}
-                  </h4>
                 </div>
-                <div className="border border-neutral-200 dark:border-[#FCF6EC]/10 border-t-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-white dark:bg-[#2E2521] border-b border-neutral-200 dark:border-[#FCF6EC]/20">
-                        {filledPositions.map((pos) => (
-                          <TableHead key={pos} className="py-2 px-3 text-xs font-medium text-neutral-600 dark:text-[#FCF6EC]/70">
-                            {pos}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <TableRow className="bg-gray-200 dark:bg-[#2E2521]/80 hover:bg-gray-100 dark:hover:bg-[#FCF6EC]/5">
-                        {filledPositions.map((pos) => {
-                          const searchPos = section.positionMap?.[pos] || pos;
-                          const assignment = sectionAssignments.find(a => a.position === searchPos);
-                      return (
-                            <TableCell key={pos} className="px-3 py-2">
-                              <div className="text-xs text-neutral-900 dark:text-[#FCF6EC]">
-                                {assignment?.personnel_name || '-'}
-                              </div>
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-            );
-          })}
-        </div>
+        ))}
       </div>
     );
   };
@@ -441,8 +556,21 @@ export default function ManningList() {
 
       <div className="max-w-[1920px] mx-auto relative">
         {/* Header */}
-        <header className="px-6 pt-6 pb-8 border-b border-gray-200 dark:border-[#FCF6EC]/20">
-          <div className="flex items-center justify-between mb-12 max-w-7xl mx-auto">
+        <header className="px-4 md:px-6 pt-6 pb-4 md:pb-8 border-b border-gray-200 dark:border-[#FCF6EC]/20">
+          {/* Mobile Header */}
+          <div className="md:hidden space-y-4 max-w-7xl mx-auto">
+            <div className="flex flex-col items-start">
+              <span className="text-[8px] tracking-[0.2em] text-neutral-500 uppercase mb-1">
+                PERSONNEL DUTY ROSTER
+              </span>
+              <h1 className="text-2xl tracking-tight text-neutral-900 dark:text-[#FCF6EC] uppercase">
+                MANNING LIST
+              </h1>
+            </div>
+          </div>
+
+          {/* Desktop Header */}
+          <div className="hidden md:flex items-center justify-between mb-12 max-w-7xl mx-auto">
             <div className="space-y-0.5">
               <span className="text-[10px] tracking-[0.2em] text-gray-500 uppercase block">Fire Check</span>
               <h1 className="text-[32px] font-normal tracking-[-0.02em] text-gray-900 dark:text-[#FCF6EC] uppercase">Manning List</h1>
@@ -451,19 +579,121 @@ export default function ManningList() {
           </div>
           
           {/* Stats Overview */}
-          <div className="grid grid-cols-4 gap-24 max-w-7xl mx-auto">
-            <StatCard title="TOTAL STRENGTH" value={stats?.total_strength.toString() || '0'} />
-            <StatCard title="CURRENT DUTY OPS" value={stats?.current_duty_ops.toString() || '0'} />
-            <StatCard title="ON LEAVE" value={stats?.leave_count.toString() || '0'} />
-            <StatCard title="COURSE/MC" value={stats?.mc_count.toString() || '0'} />
+          <div className="flex flex-row justify-between mt-8 max-w-7xl mx-auto px-2">
+            <div className="flex flex-col items-start">
+              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">TOTAL</p>
+              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats?.total_strength || '0'}</p>
+            </div>
+            
+            <div className="flex flex-col items-start">
+              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">
+                <span className="md:hidden">DUTY OPS</span>
+                <span className="hidden md:inline">CURRENT<br />DUTY OPS</span>
+              </p>
+              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em] md:ml-8">{stats?.current_duty_ops || '0'}</p>
+            </div>
+            
+            <div className="flex flex-col items-start">
+              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">LEAVE</p>
+              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats?.leave_count || '0'}</p>
+            </div>
+            
+            <div className="flex flex-col items-start">
+              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">MC</p>
+              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats?.mc_count || '0'}</p>
+            </div>
           </div>
         </header>
 
         {/* Main Content */}
         <main className="px-6 pb-6">
           {/* Search and Actions */}
-          <div className="flex items-center justify-between gap-6 py-6 max-w-7xl mx-auto">
-            <div className="relative w-[480px]">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-6 py-4 md:py-6 max-w-7xl mx-auto">
+            {/* Mobile Actions */}
+            <div className="flex md:hidden items-center justify-between w-full gap-2">
+              <Button 
+                variant="outline" 
+                size="icon"
+                onClick={() => setShowMobileSearch(!showMobileSearch)}
+                className="h-8 w-8 shrink-0"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => setShowMobileDate(!showMobileDate)}
+                  className="h-8 w-8"
+                >
+                  <Calendar className="h-4 w-4" />
+                </Button>
+
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      className="h-8 w-8"
+                    >
+                      <Users className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Personnel List</DialogTitle>
+                    </DialogHeader>
+                    <PersonnelList personnel={personnel} />
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="icon"
+                      className="h-8 w-8"
+                    >
+                      <svg 
+                        xmlns="http://www.w3.org/2000/svg" 
+                        width="16" 
+                        height="16" 
+                        viewBox="0 0 24 24" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        strokeWidth="2" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round" 
+                        className="h-4 w-4"
+                      >
+                        <line x1="18" y1="20" x2="18" y2="10"></line>
+                        <line x1="12" y1="20" x2="12" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="14"></line>
+                      </svg>
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Manning Statistics</DialogTitle>
+                    </DialogHeader>
+                    <ManningStatistics statistics={stats as DailyStatistics} />
+                  </DialogContent>
+                </Dialog>
+
+                <Button 
+                  size="icon"
+                  className="h-8 w-8 bg-neutral-900"
+                >
+                  <Plus className="h-4 w-4 text-white" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Mobile Search - Expandable */}
+            {showMobileSearch && (
+              <div className="md:hidden w-full">
+                <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
             <Input 
               type="search" 
@@ -473,14 +703,43 @@ export default function ManningList() {
                 className="pl-10 bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900 h-9"
             />
           </div>
+              </div>
+            )}
 
-            <div className="flex items-center gap-4">
+            {/* Mobile Date - Expandable */}
+            {showMobileDate && (
+              <div className="md:hidden w-full">
             <Input
               type="date"
               value={dateFilter}
               onChange={handleDateChange}
-                className="w-[160px] bg-neutral-50 dark:bg-[#1C1917] border-0 focus-visible:ring-neutral-900 text-xs font-['Azeret_Mono'] h-9"
+                  className="w-full bg-neutral-50 dark:bg-[#1C1917] border-0 focus-visible:ring-neutral-900 text-xs font-['Azeret_Mono'] h-9"
+                />
+              </div>
+            )}
+
+            {/* Desktop Search and Actions */}
+            <div className="hidden md:block relative w-[480px]">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+              <Input 
+                type="search" 
+                placeholder="Search personnel..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900 h-9"
               />
+            </div>
+
+            <div className="hidden md:flex items-center gap-4">
+              <div className="flex items-center bg-neutral-50 dark:bg-[#1C1917] rounded-md h-9 px-3">
+                <Calendar className="h-4 w-4 mr-2 text-neutral-500" />
+                <Input
+                  type="date"
+                  value={dateFilter}
+                  onChange={handleDateChange}
+                  className="w-[120px] bg-transparent border-0 focus-visible:ring-0 text-xs font-['Azeret_Mono'] h-9 p-0"
+                />
+              </div>
               
               <Dialog>
                 <DialogTrigger asChild>
@@ -488,7 +747,7 @@ export default function ManningList() {
                     variant="outline"
                     className="h-9 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1"
                   >
-                    <Users className="h-3.5 w-3.5" />
+                    <Users className="h-3.5 w-3.5 mr-1" />
                     <span>Personnel</span>
                   </Button>
                 </DialogTrigger>
@@ -516,7 +775,7 @@ export default function ManningList() {
                       strokeWidth="2" 
                       strokeLinecap="round" 
                       strokeLinejoin="round" 
-                      className="text-gray-900 dark:text-[#FCF6EC]"
+                      className="mr-1"
                     >
                       <line x1="18" y1="20" x2="18" y2="10"></line>
                       <line x1="12" y1="20" x2="12" y2="4"></line>
@@ -534,13 +793,15 @@ export default function ManningList() {
               </Dialog>
               
               <Button 
-                className="bg-neutral-900 hover:bg-neutral-800 dark:bg-[#2E2521] dark:hover:bg-[#2E2521]/80 font-['Azeret_Mono'] h-9 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1"
+                className="bg-neutral-900 hover:bg-neutral-800 h-9 px-3 rounded-md"
               >
-                <Plus className="h-4 w-4 text-white dark:text-[#FCF6EC]" /> 
-                <span className="text-white dark:text-[#FCF6EC]">Add Personnel</span>
+                <Plus className="h-4 w-4 mr-2" /> Add Personnel
           </Button>
                 </div>
               </div>
+          
+          {/* Border separator */}
+          <div className="border-b border-gray-200 dark:border-[#FCF6EC]/20"></div>
           
           {/* Duty Info Card */}
           <div className="max-w-7xl mx-auto mb-8">
@@ -602,7 +863,67 @@ export default function ManningList() {
                             BRIDGE CREW
                           </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-6">
+                        {/* Mobile View */}
+                        <div className="md:hidden space-y-6">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                OOW
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'OOW')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'OOW')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                ENG/EMT
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'ENG/EMT')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'ENG/EMT')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                STEERSMAN
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'STEERSMAN')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'STEERSMAN')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                NAV SPEC
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'NAV SPEC')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'NAV SPEC')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Desktop View */}
+                        <div className="hidden md:grid grid-cols-4 gap-6">
                           {['OOW', 'ENG/EMT', 'STEERSMAN', 'NAV SPEC'].map(position => (
                             <div key={position} className="space-y-4">
                               <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
@@ -623,7 +944,67 @@ export default function ManningList() {
                             SECTION 1 (FIREFIGHTING CREW)
                           </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-6">
+                        {/* Mobile View */}
+                        <div className="md:hidden space-y-6">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                SC
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 1' && a.position === 'SC')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 1' && a.position === 'SC')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                FF1
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 1' && a.position === 'FF1')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 1' && a.position === 'FF1')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                FF2
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 1' && a.position === 'FF2')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 1' && a.position === 'FF2')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                FF3
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 1' && a.position === 'FF3')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 1' && a.position === 'FF3')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Desktop View */}
+                        <div className="hidden md:grid grid-cols-4 gap-6">
                           {['SC', 'FF1', 'FF2', 'FF3'].map(position => (
                             <div key={position} className="space-y-4">
                               <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
@@ -644,7 +1025,67 @@ export default function ManningList() {
                             SECTION 2 (DECK CREW / MOORING PARTY)
                           </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-6">
+                        {/* Mobile View */}
+                        <div className="md:hidden space-y-6">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                SC
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 2' && a.position === 'SC')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 2' && a.position === 'SC')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                FF1
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 2' && a.position === 'FF1')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 2' && a.position === 'FF1')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                FF2
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 2' && a.position === 'FF2')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 2' && a.position === 'FF2')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                FF3
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 2' && a.position === 'FF3')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 2' && a.position === 'FF3')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        {/* Desktop View */}
+                        <div className="hidden md:grid grid-cols-4 gap-6">
                           {['SC', 'FF1', 'FF2', 'FF3'].map(position => (
                             <div key={position} className="space-y-4">
                               <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
@@ -665,7 +1106,67 @@ export default function ManningList() {
                             SECTION 3 (RESCUE & EVACUATION TEAM)
                           </span>
                         </div>
-                        <div className="grid grid-cols-4 gap-6">
+                        {/* Mobile View */}
+                        <div className="md:hidden space-y-6">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                SC
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 3' && a.position === 'SC')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 3' && a.position === 'SC')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                              </span>
+                            </div>
+                        </div>
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                FF1
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 3' && a.position === 'FF1')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 3' && a.position === 'FF1')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                              </span>
+                            </div>
+                        </div>
+                      </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                FF2
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 3' && a.position === 'FF2')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 3' && a.position === 'FF2')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                </span>
+                    </div>
+                            </div>
+                            <div className="space-y-2">
+                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                                FF3
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 3' && a.position === 'FF3')?.personnel_name?.split(' ')[0] || '-'}
+                                </span>
+                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
+                                  {vehicleAssignments.find(a => a.section === 'SECTION 3' && a.position === 'FF3')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                              </span>
+                            </div>
+                        </div>
+                          </div>
+                        </div>
+                        {/* Desktop View */}
+                        <div className="hidden md:grid grid-cols-4 gap-6">
                           {['SC', 'FF1', 'FF2', 'FF3'].map(position => (
                             <div key={position} className="space-y-4">
                               <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
@@ -680,54 +1181,9 @@ export default function ManningList() {
                       </div>
                     </div>
                   ) : vehicleType === 'LF811' || vehicleType === 'LF812' ? (
-                    <div className="space-y-4">
-                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                        <div className="grid grid-cols-4 gap-6">
-                          {['SC', 'PO', 'FF1', 'FF2'].map(position => (
-                            <div key={position} className="space-y-4">
-                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
-                                {position}
-                              </span>
-                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
-                                {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    renderRegularVehicle(vehicleType, vehicleAssignments)
                   ) : vehicleType === 'RFV811' ? (
-                    <div className="space-y-4">
-                      <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                        {/* First Row */}
-                        <div className="grid grid-cols-3 gap-6 mb-6">
-                          {['OOW', 'ENG/EMT', 'STEERSMAN'].map(position => (
-                            <div key={position} className="space-y-4">
-                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
-                                {position}
-                              </span>
-                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
-                                {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        
-                        {/* Second Row */}
-                        <div className="grid grid-cols-3 gap-6">
-                          {['NAV', 'FF1', 'FF2'].map(position => (
-                            <div key={position} className="space-y-4">
-                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
-                                {position}
-                              </span>
-                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
-                                {vehicleAssignments.find(a => a.position === position)?.personnel_name || '-'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    renderRFV811(vehicleAssignments)
                   ) : (
                     <div className="space-y-4">
                       <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
@@ -739,7 +1195,7 @@ export default function ManningList() {
                         <div className="grid grid-cols-4 gap-6">
                           {Array.from(new Set(vehicleAssignments.map(a => a.position))).map(position => (
                             <div key={position} className="space-y-4">
-                              <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
+                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] uppercase block font-medium">
                                 {position}
                               </span>
                               <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em] block">
@@ -763,9 +1219,9 @@ export default function ManningList() {
 
 function StatCard({ title, value }: { title: string; value: string }) {
   return (
-    <div className="bg-white dark:bg-[#2E2521] p-6 rounded-md border border-gray-200 dark:border-[#FCF6EC]/20 shadow-sm">
-      <p className="text-xs font-['Azeret_Mono'] font-normal text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em] mb-2">{title}</p>
-      <p className="text-3xl font-['Azeret_Mono'] font-normal text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{value}</p>
+    <div className="space-y-1">
+      <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">{title}</p>
+      <p className="text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{value}</p>
     </div>
   );
 }

@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/components/ui/use-toast";
+import { ResponsiveTable } from "@/components/ui/responsive-table"
+import { DialogFooter } from "@/components/ui/dialog"
 
 interface Personnel {
   id: string;
@@ -455,154 +457,220 @@ export default function PPECheck() {
   );
 
   return (
-    <div className="flex-1 flex flex-col">
-      {/* Decorative Elements */}
-      <div className="fixed top-6 left-6 w-1.5 h-1.5 rounded-full bg-gray-900 dark:bg-[#FCF6EC]" />
-      <div className="fixed top-6 right-6 w-1.5 h-1.5 rounded-full bg-gray-900 dark:bg-[#FCF6EC]" />
-      
-      {/* Standardized Header */}
-      <header className="border-b border-neutral-100 dark:border-neutral-800 bg-white dark:bg-neutral-900">
-        <div className="px-6 pt-6 pb-4">
-          <div className="flex items-center justify-between mb-12 max-w-7xl mx-auto">
-            <div className="space-y-0.5">
-              <span className="text-[10px] tracking-[0.2em] text-gray-500 uppercase block">Fire Check</span>
-              <h1 className="text-[32px] font-normal tracking-[-0.02em] text-gray-900 dark:text-[#FCF6EC] uppercase">PPE CHECK</h1>
-            </div>
-            <span className="text-[10px] tracking-[0.2em] text-gray-500 dark:text-[#FCF6EC]/60 uppercase">BA ASSIGNMENT</span>
-          </div>
-          
-          {/* Search Bar and Add Button */}
-          <div className="mt-6 flex items-center justify-between gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-              <Input 
-                type="search" 
-                placeholder="Search by name or serial number..." 
-                className="pl-10 bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <Button className="bg-neutral-900 hover:bg-neutral-800 dark:bg-[#2E2521] dark:hover:bg-[#2E2521]/80 font-['Azeret_Mono'] h-9 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1">
-              <Plus className="h-4 w-4 text-white dark:text-[#FCF6EC]" /> 
-              <span className="text-white dark:text-[#FCF6EC]">Add Personnel</span>
-          </Button>
+    <div className="flex-1 p-4 md:p-8 overflow-auto">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <h1 className="text-2xl font-bold">PPE Check</h1>
+          <div className="relative w-full sm:w-64 md:w-80">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+            <Input
+              type="search"
+              placeholder="Search personnel or equipment..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 w-full"
+              aria-label="Search personnel or equipment"
+            />
           </div>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto p-6">
-        <div className="mx-auto max-w-7xl space-y-6">
-          {isLoading ? (
-            <div>Loading...</div>
-          ) : (
-            /* Categories */
-            groupingOrder.map(category => {
-              const personnel = filteredPersonnel.filter(p => getCategory(p.grouping) === category);
-              if (!personnel?.length) return null;
+        {isLoading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-neutral-900 dark:border-neutral-100"></div>
+          </div>
+        ) : (
+          /* Categories */
+          groupingOrder.map(category => {
+            const personnel = filteredPersonnel.filter(p => getCategory(p.grouping) === category);
+            if (!personnel?.length) return null;
 
-              return (
-                <Card key={category}>
-                  <CardHeader>
-                    <CardTitle>{category}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Table className="table-fixed w-full">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[20%]">Name</TableHead>
-                          <TableHead className="w-[16%]">Vessel Backplate</TableHead>
-                          <TableHead className="w-[16%]">Vessel Cylinder</TableHead>
-                          <TableHead className="w-[16%]">LFAV Backplate</TableHead>
-                          <TableHead className="w-[16%]">LFAV Cylinder</TableHead>
-                          <TableHead className="w-[16%]">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {personnel.map((person) => (
-                          <TableRow key={person.name}>
-                            <TableCell className="w-[20%]">{person.name}</TableCell>
-                            <TableCell className="w-[16%]">{person.vessel_backplate || '-'}</TableCell>
-                            <TableCell className="w-[16%]">{person.vessel_cylinder || '-'}</TableCell>
-                            <TableCell className="w-[16%]">{person.lfav_backplate || '-'}</TableCell>
-                            <TableCell className="w-[16%]">{person.lfav_cylinder || '-'}</TableCell>
-                            <TableCell className="w-[16%]">
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleFormFill(person)}
-                                >
-                                  <Copy className="h-4 w-4 mr-2" />
-                                  Fill Form
-                                </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
-        </div>
-      </main>
+            return (
+              <Card key={category} className="overflow-hidden">
+                <CardHeader className="px-4 md:px-6 py-3 md:py-4">
+                  <CardTitle className="text-lg">{category}</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {/* Desktop View - ResponsiveTable */}
+                  <div className="hidden md:block">
+                    <ResponsiveTable
+                      columns={[
+                        {
+                          key: "name",
+                          header: "Name",
+                          className: "w-[20%]"
+                        },
+                        {
+                          key: "vessel_backplate",
+                          header: "Vessel Backplate",
+                          className: "w-[16%]",
+                          render: (value) => value || '-'
+                        },
+                        {
+                          key: "vessel_cylinder",
+                          header: "Vessel Cylinder",
+                          className: "w-[16%]",
+                          render: (value) => value || '-'
+                        },
+                        {
+                          key: "lfav_backplate",
+                          header: "LFAV Backplate",
+                          className: "w-[16%]",
+                          render: (value) => value || '-'
+                        },
+                        {
+                          key: "lfav_cylinder",
+                          header: "LFAV Cylinder",
+                          className: "w-[16%]",
+                          render: (value) => value || '-'
+                        },
+                        {
+                          key: "actions",
+                          header: "Actions",
+                          className: "w-[16%]",
+                          render: (_, person) => (
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleFormFill(person)}
+                                className="whitespace-nowrap"
+                              >
+                                <Copy className="h-4 w-4 mr-2" />
+                                Fill Form
+                              </Button>
+                            </div>
+                          )
+                        }
+                      ]}
+                      data={personnel}
+                      keyField="name"
+                      emptyMessage="No personnel found"
+                    />
+                  </div>
+                  
+                  {/* Mobile View - Custom Cards */}
+                  <div className="md:hidden px-4 py-2 space-y-4">
+                    {personnel.map((person, index) => (
+                      <div 
+                        key={person.name || index}
+                        className="p-5 rounded-lg border border-gray-200 dark:border-gray-800 bg-white dark:bg-neutral-900 shadow-sm"
+                      >
+                        {/* Name with better styling */}
+                        <div className="font-bold text-base mb-5">{person.name}</div>
+                        
+                        {/* Equipment Grid */}
+                        <div className="space-y-4">
+                          {/* Vessel Row */}
+                          <div className="grid grid-cols-2 gap-6">
+                            <div>
+                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                Vessel Backplate
+                              </div>
+                              <div className="font-medium text-sm">
+                                {person.vessel_backplate || '-'}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                Vessel Cylinder
+                              </div>
+                              <div className="font-medium text-sm">
+                                {person.vessel_cylinder || '-'}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* LFAV Row */}
+                          <div className="grid grid-cols-2 gap-6">
+                            <div>
+                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                LFAV Backplate
+                              </div>
+                              <div className="font-medium text-sm">
+                                {person.lfav_backplate || '-'}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                LFAV Cylinder
+                              </div>
+                              <div className="font-medium text-sm">
+                                {person.lfav_cylinder || '-'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Actions */}
+                        <div className="mt-5">
+                          <Button
+                            variant="outline"
+                            size="default"
+                            onClick={() => handleFormFill(person)}
+                            className="w-full flex items-center justify-center h-10"
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Fill Form
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {personnel.length === 0 && (
+                      <div className="text-center py-8 text-neutral-500 dark:text-neutral-400">
+                        No personnel found
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Form Pre-filled</DialogTitle>
-            <DialogDescription>
-              A link has been created with pre-filled information for {selectedPerson?.name}.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
+        {/* Dialog for form URL */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Form URL Generated</DialogTitle>
+              <DialogDescription>
+                Copy this URL to access the pre-filled form for {selectedPerson?.name}
+              </DialogDescription>
+            </DialogHeader>
             <div className="flex items-center space-x-2">
               <div className="grid flex-1 gap-2">
-                <p className="text-sm font-medium">Pre-filled information:</p>
-                <ul className="text-sm text-muted-foreground list-disc pl-5">
-                  <li>Name: {selectedPerson?.name}</li>
-                  {selectedPerson?.vessel_backplate && selectedPerson?.vessel_cylinder ? (
-                    <li>Vessel BA Set: {selectedPerson.vessel_backplate} / {selectedPerson.vessel_cylinder}</li>
-                  ) : prefilledUrl.includes('vesselType=') && (
-                    <li>Vessel BA Set: N.A</li>
-                  )}
-                  {selectedPerson?.lfav_backplate && selectedPerson?.lfav_cylinder ? (
-                    <li>LFAV BA Set: {selectedPerson.lfav_backplate} / {selectedPerson.lfav_cylinder}</li>
-                  ) : prefilledUrl.includes('lfType=') && (
-                    <li>LFAV BA Set: N.A</li>
-                  )}
-                </ul>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Note: You will still need to fill in the remaining fields manually.
-                </p>
+                <Input
+                  value={prefilledUrl}
+                  readOnly
+                  className="w-full"
+                />
               </div>
+              <Button 
+                type="button" 
+                size="sm" 
+                className="px-3" 
+                onClick={copyToClipboard}
+              >
+                <span className="sr-only">Copy</span>
+                <Copy className="h-4 w-4" />
+              </Button>
             </div>
-          </div>
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-            <Button
-              type="button"
-              variant="default"
-              className="w-full sm:w-auto"
-              onClick={() => window.open(prefilledUrl, '_blank')}
-            >
-              Open Form
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full sm:w-auto"
-              onClick={copyToClipboard}
-            >
-              <Copy className="h-4 w-4 mr-2" />
-              Copy URL
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter className="sm:justify-start">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  window.open(prefilledUrl, '_blank');
+                }}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Open Form
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </div>
   );
 } 
