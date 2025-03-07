@@ -24,6 +24,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { Sheet, SheetContent, SheetTrigger } from "@/app/components/ui/sheet"
 import { cn } from "@/lib/utils"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 
 const locations = [
   'All Locations',
@@ -92,6 +93,8 @@ export default function BAMasterList() {
   const [isLoading, setIsLoading] = useState(true)
   const [view, setView] = useState<'list' | 'grouped'>('grouped')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
+  const [showMobileSearch, setShowMobileSearch] = useState(false)
+  const [showMobileFilter, setShowMobileFilter] = useState(false)
 
   // Calculate stats from backplates
   const stats = {
@@ -112,13 +115,20 @@ export default function BAMasterList() {
   // Helper function to check if service is due this month
   const isServiceDueThisMonth = (dueDate: string | null): boolean => {
     if (!dueDate) return false;
-    
-    const now = new Date();
-    const serviceDate = new Date(dueDate);
-    
-    return serviceDate.getMonth() === now.getMonth() && 
-           serviceDate.getFullYear() === now.getFullYear();
-  }
+    const today = new Date();
+    const due = new Date(dueDate);
+    return (
+      today.getFullYear() === due.getFullYear() &&
+      today.getMonth() === due.getMonth()
+    );
+  };
+
+  const isServiceOverdue = (dueDate: string | null): boolean => {
+    if (!dueDate) return false;
+    const today = new Date();
+    const due = new Date(dueDate);
+    return today > due;
+  };
 
   useEffect(() => {
     fetchBAMasterList()
@@ -221,99 +231,59 @@ export default function BAMasterList() {
         {title}
       </h3>
       <div className="space-y-4 px-4 py-4">
-        {items?.map((backplate) => (
-          <div 
-            key={backplate.id}
-            className="space-y-3"
-          >
-            <div className="flex items-center justify-between">
-              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                {getRole(backplate.location)}
-              </span>
-              {!backplate.is_spare ? (
-                <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1">
-                  <Check className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
-                </div>
-              ) : (
-                <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1 opacity-40">
-                  <X className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
-                </div>
-              )}
-            </div>
-            <div className="space-y-2 border-b border-gray-200 dark:border-[#FCF6EC]/20 pb-4">
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Backplate</span>
-                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                  {backplate.serial_number}
+        {items?.map((backplate, index) => {
+          let roleName = getRole(backplate.location);
+          if (roleName === '-') {
+            if (title === 'SPARE') {
+              roleName = `Spare ${index + 1}`;
+            } else if (title === 'Others') {
+              roleName = backplate.location || 'Unknown';
+            } else {
+              roleName = backplate.location?.replace(title, '').trim() || 'Unknown';
+            }
+          }
+          
+          return (
+            <div 
+              key={backplate.id}
+              className="space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                  {roleName}
                 </span>
+                {!backplate.is_spare ? (
+                  <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1">
+                    <Check className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
+                  </div>
+                ) : (
+                  <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1 opacity-40">
+                    <X className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
+                  </div>
+                )}
               </div>
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Cylinder</span>
-                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                  {backplate.cylinder_serial || '-'}
-                </span>
+              <div className="space-y-2 border-b border-gray-200 dark:border-[#FCF6EC]/20 pb-4">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Backplate</span>
+                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                    {backplate.serial_number}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Cylinder</span>
+                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                    {backplate.cylinder_serial || '-'}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 
-  // Renamed from TableRow to BackplateTableRow
-  const BackplateTableRow = ({ backplate, index }: { backplate: BaMasterList, index: number }) => (
-    <TableRow 
-      className={`
-        bg-white hover:bg-gray-50 dark:hover:bg-[#FCF6EC]/5
-        ${backplate.location === 'SPARE' ? 'bg-gray-50 dark:bg-[#FCF6EC]/5' : ''}
-        ${isServiceDueThisMonth(backplate.service_due_date) ? 'bg-amber-50 dark:bg-amber-900/30' : ''}
-      `}
-    >
-      <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">{index + 1}</TableCell>
-      <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-        {backplate.serial_number}
-      </TableCell>
-      <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-        {backplate.cylinder_serial || '-'}
-      </TableCell>
-      <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-        {backplate.date_of_birth ? new Date(backplate.date_of_birth).toLocaleDateString('en-GB', { 
-          year: 'numeric', 
-          month: 'short'
-        }) : '-'}
-      </TableCell>
-      <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-        {backplate.hydro_date ? new Date(backplate.hydro_date).toLocaleDateString('en-GB', {
-          year: '2-digit',
-          month: 'short'
-        }) : '-'}
-      </TableCell>
-      <TableCell 
-        className={`text-sm ${isServiceDueThisMonth(backplate.service_due_date) ? 'text-amber-600 font-medium' : 'text-gray-700 dark:text-[#FCF6EC]/60'} font-light font-['Azeret_Mono']`}
-      >
-        {backplate.service_due_date ? new Date(backplate.service_due_date).toLocaleDateString('en-GB', {
-          year: '2-digit',
-          month: 'short'
-        }) : '-'}
-      </TableCell>
-      <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-        {backplate.location || '-'}
-      </TableCell>
-      <TableCell className="text-center">
-        {!backplate.is_spare ? (
-          <div className="bg-gray-100 rounded-full p-1.5 mx-auto w-fit">
-            <Check className="h-4 w-4 text-gray-900" />
-          </div>
-        ) : (
-          <div className="bg-gray-100 rounded-full p-1.5 mx-auto w-fit opacity-40">
-            <X className="h-4 w-4 text-gray-900" />
-          </div>
-        )}
-      </TableCell>
-    </TableRow>
-  );
-
-  // Update the usage in the table view
+  // Update the tableView definition
   const tableView = (
     <Table>
       <TableHeader>
@@ -330,11 +300,56 @@ export default function BAMasterList() {
       </TableHeader>
       <TableBody>
         {filteredBackplates.map((backplate, index) => (
-          <BackplateTableRow 
+          <TableRow 
             key={backplate.id}
-            backplate={backplate}
-            index={index}
-          />
+            className={`
+              bg-white hover:bg-gray-50 dark:hover:bg-[#FCF6EC]/5
+              ${backplate.location === 'SPARE' ? 'bg-gray-50 dark:bg-[#FCF6EC]/5' : ''}
+              ${isServiceDueThisMonth(backplate.service_due_date) ? 'bg-amber-50 dark:bg-amber-900/30' : ''}
+            `}
+          >
+            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">{index + 1}</TableCell>
+            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+              {backplate.serial_number}
+            </TableCell>
+            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+              {backplate.cylinder_serial || '-'}
+            </TableCell>
+            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+              {backplate.date_of_birth ? new Date(backplate.date_of_birth).toLocaleDateString('en-GB', { 
+                year: 'numeric', 
+                month: 'short'
+              }) : '-'}
+            </TableCell>
+            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+              {backplate.hydro_date ? new Date(backplate.hydro_date).toLocaleDateString('en-GB', {
+                year: '2-digit',
+                month: 'short'
+              }) : '-'}
+            </TableCell>
+            <TableCell 
+              className={`text-sm ${isServiceDueThisMonth(backplate.service_due_date) ? 'text-amber-600 font-medium' : 'text-gray-700 dark:text-[#FCF6EC]/60'} font-light font-['Azeret_Mono']`}
+            >
+              {backplate.service_due_date ? new Date(backplate.service_due_date).toLocaleDateString('en-GB', {
+                year: '2-digit',
+                month: 'short'
+              }) : '-'}
+            </TableCell>
+            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+              {backplate.location || '-'}
+            </TableCell>
+            <TableCell className="text-center">
+              {!backplate.is_spare ? (
+                <div className="bg-gray-100 rounded-full p-1.5 mx-auto w-fit">
+                  <Check className="h-4 w-4 text-gray-900" />
+                </div>
+              ) : (
+                <div className="bg-gray-100 rounded-full p-1.5 mx-auto w-fit opacity-40">
+                  <X className="h-4 w-4 text-gray-900" />
+                </div>
+              )}
+            </TableCell>
+          </TableRow>
         ))}
       </TableBody>
     </Table>
@@ -354,8 +369,21 @@ export default function BAMasterList() {
 
       <div className="max-w-[1920px] mx-auto relative">
         {/* Header */}
-        <header className="px-6 pt-6 pb-8 border-b border-gray-200 dark:border-[#FCF6EC]/20">
-          <div className="flex items-center justify-between mb-12 max-w-7xl mx-auto">
+        <header className="px-4 md:px-6 pt-6 pb-4 md:pb-8 border-b border-gray-200 dark:border-[#FCF6EC]/20">
+          {/* Mobile Header */}
+          <div className="md:hidden space-y-4 max-w-7xl mx-auto">
+            <div className="flex flex-col items-start">
+              <span className="text-[8px] tracking-[0.2em] text-neutral-500 uppercase mb-1">
+                SCBA INVENTORY
+              </span>
+              <h1 className="text-2xl tracking-tight text-neutral-900 dark:text-[#FCF6EC] uppercase">
+                BA MASTER LIST
+              </h1>
+            </div>
+          </div>
+
+          {/* Desktop Header - unchanged */}
+          <div className="hidden md:flex items-center justify-between mb-12 max-w-7xl mx-auto">
             <div className="space-y-0.5">
               <span className="text-[10px] tracking-[0.2em] text-gray-500 uppercase block">Fire Check</span>
               <h1 className="text-[32px] font-normal tracking-[-0.02em] text-gray-900 dark:text-[#FCF6EC] uppercase">BA MASTER LIST</h1>
@@ -364,38 +392,141 @@ export default function BAMasterList() {
           </div>
           
           {/* Stats Overview */}
-          <div className="grid grid-cols-4 gap-24 max-w-7xl mx-auto">
-            <StatCard title="Total Cylinders" value={stats.total} />
-            <StatCard title="In Service" value={stats.inService} />
-            <StatCard title="Due Service" value={stats.dueService} />
-            <StatCard title="Spare" value={stats.spare} />
-        </div>
-      </header>
+          <div className="flex flex-row justify-between mt-8 max-w-7xl mx-auto px-2">
+            <div className="flex flex-col items-start">
+              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">TOTAL</p>
+              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.total}</p>
+            </div>
+            
+            <div className="flex flex-col items-start">
+              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">
+                <span className="md:hidden">IN SERVICE</span>
+                <span className="hidden md:inline">IN<br />SERVICE</span>
+              </p>
+              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em] md:ml-8">{stats.inService}</p>
+            </div>
+            
+            <div className="flex flex-col items-start">
+              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">DUE</p>
+              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.dueService}</p>
+            </div>
+            
+            <div className="flex flex-col items-start">
+              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">SPARE</p>
+              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.spare}</p>
+            </div>
+          </div>
+        </header>
 
-      {/* Main Content */}
+        {/* Main Content */}
         <main className="px-6 pb-6">
           {/* Search and Actions */}
-          <div className="flex items-center justify-between gap-6 py-6 max-w-7xl mx-auto">
-            <div className="relative w-[480px]">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-6 py-4 md:py-6 max-w-7xl mx-auto">
+            {/* Mobile Actions */}
+            <div className="flex md:hidden items-center justify-between w-full gap-2">
+              <Button 
+                variant="outline" 
+                size="icon"
+                onClick={() => setShowMobileSearch(!showMobileSearch)}
+                className="h-8 w-8 shrink-0"
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => setShowMobileFilter(!showMobileFilter)}
+                  className="h-8 w-8"
+                >
+                  <MapPin className="h-4 w-4" />
+                </Button>
+
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => setView(view === 'list' ? 'grouped' : 'list')}
+                  className="h-8 w-8"
+                >
+                  {view === 'list' ? (
+                    <Grid className="h-4 w-4" />
+                  ) : (
+                    <List className="h-4 w-4" />
+                  )}
+                </Button>
+
+                <Button 
+                  size="icon"
+                  className="h-8 w-8 bg-neutral-900"
+                >
+                  <Plus className="h-4 w-4 text-white" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Mobile Search - Expandable */}
+            {showMobileSearch && (
+              <div className="md:hidden w-full">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-neutral-400" />
+                  <Input 
+                    type="search" 
+                    placeholder="Search by serial number..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-7 h-8 text-xs bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Mobile Location Filter - Expandable */}
+            {showMobileFilter && (
+              <div className="md:hidden w-full">
+                <Select value={locationFilter} onValueChange={setLocationFilter}>
+                  <SelectTrigger className="w-full h-8 bg-neutral-50 dark:bg-[#1C1917] border-0
+                                        text-gray-900 dark:text-[#FCF6EC] text-xs font-['Azeret_Mono']
+                                        focus-visible:ring-neutral-900 rounded-md">
+                    <MapPin className="mr-1 h-3 w-3 text-neutral-400" />
+                    <SelectValue placeholder="All Locations" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locations.map(location => (
+                      <SelectItem 
+                        key={location} 
+                        value={location} 
+                        className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] hover:bg-gray-100 dark:hover:bg-[#2E2521]/90 transition-colors text-xs tracking-wide"
+                      >
+                        {location}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Desktop Search and Filter */}
+            <div className="hidden md:flex items-center gap-2 md:gap-4 w-full md:w-auto">
+              <div className="relative flex-1 md:w-[480px]">
+                <Search className="absolute left-2 md:left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
                 <Input 
                   type="search" 
                   placeholder="Search by serial number..." 
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900 h-9"
+                  className="pl-7 md:pl-10 h-9 text-sm bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900"
                 />
               </div>
 
-            <div className="flex items-center gap-4">
               <Select value={locationFilter} onValueChange={setLocationFilter}>
-                <SelectTrigger className="w-[200px] bg-neutral-50 dark:bg-[#1C1917] border-0 h-9 
-                                      text-gray-900 dark:text-[#FCF6EC] text-xs font-['Azeret_Mono']
+                <SelectTrigger className="w-[200px] h-9 bg-neutral-50 dark:bg-[#1C1917] border-0
+                                      text-gray-900 dark:text-[#FCF6EC] text-sm font-['Azeret_Mono']
                                       focus-visible:ring-neutral-900 rounded-md">
                   <MapPin className="mr-2 h-4 w-4 text-neutral-400" />
                   <SelectValue placeholder="All Locations" />
                 </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-[#2E2521] border-gray-200 dark:border-[#FCF6EC]/20">
+                <SelectContent>
                   {locations.map(location => (
                     <SelectItem 
                       key={location} 
@@ -407,41 +538,27 @@ export default function BAMasterList() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
 
-              <div className="flex bg-neutral-50 dark:bg-[#1C1917] rounded-md overflow-hidden">
-              <Button
-                  variant="ghost"
-                size="sm"
-                onClick={() => setView('list')}
-                  className={cn(
-                    "h-9 w-9 rounded-none transition-colors",
-                    view === 'list' 
-                      ? "bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-[#2E2521] dark:hover:bg-gray-50 font-medium" 
-                      : "bg-neutral-50 text-neutral-500 hover:bg-neutral-100 dark:bg-[#1C1917] dark:text-[#FCF6EC]/70 dark:hover:bg-[#2E2521]/30"
-                  )}
+            {/* Desktop View Toggle and Add Button */}
+            <div className="hidden md:flex items-center gap-4">
+              <Button 
+                variant="outline" 
+                size="icon" 
+                onClick={() => setView(view === 'list' ? 'grouped' : 'list')}
+                className="h-9 w-9"
               >
-                  <List className="h-4 w-4" />
-              </Button>
-              <Button
-                  variant="ghost"
-                size="sm"
-                onClick={() => setView('grouped')}
-                  className={cn(
-                    "h-9 w-9 rounded-none transition-colors",
-                    view === 'grouped' 
-                      ? "bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-[#2E2521] dark:hover:bg-gray-50 font-medium" 
-                      : "bg-neutral-50 text-neutral-500 hover:bg-neutral-100 dark:bg-[#1C1917] dark:text-[#FCF6EC]/70 dark:hover:bg-[#2E2521]/30"
-                  )}
-              >
+                {view === 'list' ? (
                   <Grid className="h-4 w-4" />
+                ) : (
+                  <List className="h-4 w-4" />
+                )}
               </Button>
-              </div>
 
               <Button 
-                className="bg-neutral-900 hover:bg-neutral-800 dark:bg-[#2E2521] dark:hover:bg-[#2E2521]/80 font-['Azeret_Mono'] h-9 px-3 rounded-md transition-colors text-xs tracking-wide border border-gray-200 dark:border-[#FCF6EC]/20 flex items-center gap-1"
+                className="bg-neutral-900 hover:bg-neutral-800 h-9 px-3"
               >
-                <Plus className="h-4 w-4 text-white dark:text-[#FCF6EC]" /> 
-                <span className="text-white dark:text-[#FCF6EC]">Add Cylinder</span>
+                <Plus className="h-4 w-4 mr-2" /> Add Cylinder
               </Button>
             </div>
           </div>
@@ -451,135 +568,37 @@ export default function BAMasterList() {
 
           {/* Content */}
           <div className="py-6 max-w-7xl mx-auto">
-            {view === 'grouped' ? (
+            {view === 'list' ? (
+              <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
+                <div className="overflow-x-auto">
+                  {tableView}
+                </div>
+              </div>
+            ) : (
               <div className="space-y-6">
                 {locationFilter === 'All Locations' ? (
                   <div className="space-y-6">
-                    <div className="grid grid-cols-3 gap-6">
-                      {/* LF811 */}
-                      <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden min-h-[480px] border border-gray-200 dark:border-[#FCF6EC]/20">
-                        <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
-                          LF811
-                        </h3>
-                        <div className="p-4 space-y-4">
-                          {['SC', 'PO', 'FF1', 'FF2'].map((role) => (
-                            <div key={role} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                  {role}
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-y-2">
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Backplate
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {(groupedBackplates['LF811'] || []).find(b => b.location?.includes(role))?.serial_number || '-'}
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Cylinder
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {(groupedBackplates['LF811'] || []).find(b => b.location?.includes(role))?.cylinder_serial || '-'}
-                                </div>
-                              </div>
-                              {isServiceDueThisMonth((groupedBackplates['LF811'] || []).find(b => b.location?.includes(role))?.service_due_date ?? null) && (
-                                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                  <AlertCircle className="h-3 w-3" />
-                                  <span>Service Due</span>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      {/* LF812 */}
-                      <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden min-h-[480px] border border-gray-200 dark:border-[#FCF6EC]/20">
-                        <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
-                          LF812
-                        </h3>
-                        <div className="p-4 space-y-4">
-                          {['SC', 'PO', 'FF1', 'FF2'].map((role) => (
-                            <div key={role} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                  {role}
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-y-2">
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Backplate
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {(groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.serial_number || '-'}
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Cylinder
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {(groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.cylinder_serial || '-'}
-                                </div>
-                              </div>
-                              {isServiceDueThisMonth((groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.service_due_date ?? null) && (
-                                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                  <AlertCircle className="h-3 w-3" />
-                                  <span>Service Due</span>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      {/* RFV811 */}
-                      <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden min-h-[480px] border border-gray-200 dark:border-[#FCF6EC]/20">
-                        <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
-                          RFV811
-                        </h3>
-                        <div className="p-4 space-y-4">
-                          {(groupedBackplates['RFV811'] || []).map((backplate, index) => (
-                            <div 
-                      key={backplate.id}
-                              className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                  Set {index + 1}
-                                </span>
-                              </div>
-                              <div className="space-y-2">
-                                <div className="flex items-center justify-between text-[10px]">
-                                  <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Backplate</span>
-                                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em]">{backplate.serial_number}</span>
-                                </div>
-                                <div className="flex items-center justify-between text-[10px]">
-                                  <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Cylinder</span>
-                                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em]">{backplate.cylinder_serial || '-'}</span>
-                                </div>
-                              </div>
-                              {isServiceDueThisMonth(backplate.service_due_date) && (
-                                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs">
-                                  <AlertCircle className="h-3 w-3" />
-                                  <span>Service Due</span>
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                    {/* Mobile View - Single Column */}
+                    <div className="md:hidden space-y-6">
+                      {sortedLocations.map(([location, items]) => (
+                        <StationCard key={location} title={location} items={items} />
+                      ))}
                     </div>
-                    {/* Second Row: MRV811 */}
-                    <div className="mt-6">
-                      <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
-                        <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
-                          MRV811
-                        </h3>
-                        <div className="p-4">
-                          <div className="grid grid-cols-3 gap-6">
-                            {Array.from({ length: 12 }, (_, i) => `Set ${i + 1}`).map((setNumber) => (
-                              <div key={setNumber} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+
+                    {/* Desktop View - Original Layout */}
+                    <div className="hidden md:block">
+                      <div className="grid grid-cols-3 gap-6">
+                        {/* LF811 */}
+                        <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden min-h-[480px] border border-gray-200 dark:border-[#FCF6EC]/20">
+                          <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
+                            LF811
+                          </h3>
+                          <div className="p-4 space-y-4">
+                            {['SC', 'PO', 'FF1', 'FF2'].map((role) => (
+                              <div key={role} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                    {setNumber}
+                                    {role}
                                   </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
@@ -587,16 +606,16 @@ export default function BAMasterList() {
                                     Backplate
                                   </div>
                                   <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                    {(groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.serial_number || '-'}
+                                    {(groupedBackplates['LF811'] || []).find(b => getRole(b.location) === role)?.serial_number || '-'}
                                   </div>
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
                                     Cylinder
                                   </div>
                                   <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                    {(groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.cylinder_serial || '-'}
+                                    {(groupedBackplates['LF811'] || []).find(b => getRole(b.location) === role)?.cylinder_serial || '-'}
                                   </div>
                                 </div>
-                                {isServiceDueThisMonth((groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.service_due_date ?? null) && (
+                                {isServiceDueThisMonth((groupedBackplates['LF811'] || []).find(b => getRole(b.location) === role)?.service_due_date ?? null) && (
                                   <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
                                     <AlertCircle className="h-3 w-3" />
                                     <span>Service Due</span>
@@ -606,103 +625,302 @@ export default function BAMasterList() {
                             ))}
                           </div>
                         </div>
-                      </div>
-                    </div>
-                    
-                    {/* Third Row: Others and SPARE */}
-                    <div className="mt-6 grid grid-cols-2 gap-6">
-                      {/* Others */}
-                      <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
-                        <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
-                          Others
-                        </h3>
-                        <div className="p-4 space-y-4">
-                          {['CFS811'].map((role) => (
-                            <div key={role} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                  {role}
-                                </span>
+                        {/* LF812 */}
+                        <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden min-h-[480px] border border-gray-200 dark:border-[#FCF6EC]/20">
+                          <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
+                            LF812
+                          </h3>
+                          <div className="p-4 space-y-4">
+                            {['SC', 'PO', 'FF1', 'FF2'].map((role) => (
+                              <div key={role} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                    {role}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-y-2">
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Backplate
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {(groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.serial_number || '-'}
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Cylinder
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {(groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.cylinder_serial || '-'}
+                                  </div>
+                                </div>
+                                {isServiceDueThisMonth((groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.service_due_date ?? null) && (
+                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
+                                    <AlertCircle className="h-3 w-3" />
+                                    <span>Service Due</span>
+                                  </div>
+                                )}
                               </div>
-                              <div className="grid grid-cols-2 gap-y-2">
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Backplate
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {(groupedBackplates['Others'] || []).find(b => b.location?.includes(role))?.serial_number || '-'}
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Cylinder
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {(groupedBackplates['Others'] || []).find(b => b.location?.includes(role))?.cylinder_serial || '-'}
-                                </div>
-                              </div>
-                              {isServiceDueThisMonth((groupedBackplates['Others'] || []).find(b => b.location?.includes(role))?.service_due_date ?? null) && (
-                                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                  <AlertCircle className="h-3 w-3" />
-                                  <span>Service Due</span>
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
-            </div>
-                      
-                      {/* SPARE */}
-                      <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
-                        <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
-                          SPARE
-                        </h3>
-                        <div className="p-4 space-y-4">
-                          {(groupedBackplates['SPARE'] || []).slice(0, 4).map((backplate, index) => (
-                            <div key={backplate.id} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                  Spare {index + 1}
-                      </span>
+                        {/* RFV811 */}
+                        <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden min-h-[480px] border border-gray-200 dark:border-[#FCF6EC]/20">
+                          <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
+                            RFV811
+                          </h3>
+                          <div className="p-4 space-y-4">
+                            {(groupedBackplates['RFV811'] || []).map((backplate, index) => (
+                              <div 
+                        key={backplate.id}
+                                className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                    Set {index + 1}
+                                  </span>
+                                </div>
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Backplate</span>
+                                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em]">{backplate.serial_number}</span>
+                                  </div>
+                                  <div className="flex items-center justify-between text-[10px]">
+                                    <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Cylinder</span>
+                                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                      {backplate.cylinder_serial || '-'}
+                                    </span>
+                                  </div>
+                                </div>
+                                {isServiceDueThisMonth(backplate.service_due_date) && (
+                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs">
+                                    <AlertCircle className="h-3 w-3" />
+                                    <span>Service Due</span>
+                                  </div>
+                                )}
                               </div>
-                              <div className="grid grid-cols-2 gap-y-2">
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Backplate
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Second Row: MRV811 */}
+                      <div className="mt-6">
+                        <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
+                          <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
+                            MRV811
+                          </h3>
+                          <div className="p-4">
+                            <div className="grid grid-cols-3 gap-6">
+                              {Array.from({ length: 12 }, (_, i) => `Set ${i + 1}`).map((setNumber) => (
+                                <div key={setNumber} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                      {setNumber}
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-y-2">
+                                    <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                      Backplate
+                                    </div>
+                                    <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                      {(groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.serial_number || '-'}
+                                    </div>
+                                    <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                      Cylinder
+                                    </div>
+                                    <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                      {(groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.cylinder_serial || '-'}
+                                    </div>
+                                  </div>
+                                  {isServiceDueThisMonth((groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.service_due_date ?? null) && (
+                                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Service Due</span>
+                                    </div>
+                                  )}
                                 </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {backplate.serial_number || '-'}
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Cylinder
-                                </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {backplate.cylinder_serial || '-'}
-                                </div>
-                              </div>
-                              {isServiceDueThisMonth(backplate.service_due_date) && (
-                                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                  <AlertCircle className="h-3 w-3" />
-                                  <span>Service Due</span>
-                                </div>
-                              )}
+                              ))}
                             </div>
-                          ))}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Third Row: Others and SPARE */}
+                      <div className="mt-6 grid grid-cols-2 gap-6">
+                        {/* Others */}
+                        <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
+                          <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
+                            Others
+                          </h3>
+                          <div className="p-4 space-y-4">
+                            {(groupedBackplates['Others'] || []).map((backplate) => {
+                              const roleName = getRole(backplate.location) !== '-' ? 
+                                getRole(backplate.location) : 
+                                backplate.location || 'Unknown';
+                              
+                              return (
+                                <div key={backplate.id} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                      {roleName}
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-y-2">
+                                    <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                      Backplate
+                                    </div>
+                                    <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                      {backplate.serial_number || '-'}
+                                    </div>
+                                    <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                      Cylinder
+                                    </div>
+                                    <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                      {backplate.cylinder_serial || '-'}
+                                    </div>
+                                  </div>
+                                  {isServiceDueThisMonth(backplate.service_due_date) && (
+                                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Service Due</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {/* SPARE */}
+                        <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
+                          <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
+                            SPARE
+                          </h3>
+                          <div className="p-4 space-y-4">
+                            {(groupedBackplates['SPARE'] || []).slice(0, 4).map((backplate, index) => (
+                              <div 
+                                key={backplate.id}
+                                className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : `Spare ${index + 1}`}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-y-2">
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Backplate
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {backplate.serial_number || '-'}
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Cylinder
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {backplate.cylinder_serial || '-'}
+                                  </div>
+                                </div>
+                                {isServiceDueThisMonth(backplate.service_due_date) && (
+                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
+                                    <AlertCircle className="h-3 w-3" />
+                                    <span>Service Due</span>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden min-h-[480px] border border-gray-200 dark:border-[#FCF6EC]/20">
-                    <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
-                      {locationFilter}
-                    </h3>
-                    <div className="p-4 space-y-4">
-                      {locationFilter === 'MRV811' || locationFilter === 'RFV811' ? (
-                        // For MRV811 and RFV811, display Set 1, Set 2, etc.
-                        locationFilter === 'MRV811' ? (
-                          <div className="grid grid-cols-3 gap-6">
-                            {Array.from({ length: 12 }, (_, i) => `Set ${i + 1}`).map((setNumber) => (
-                              <div key={setNumber} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                  <div className="space-y-6">
+                    {/* Mobile View - Single Column */}
+                    <div className="md:hidden">
+                      <StationCard title={locationFilter} items={groupedBackplates[locationFilter] || []} />
+                    </div>
+
+                    {/* Desktop View - Grid Layout */}
+                    <div className="hidden md:block">
+                      <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
+                        <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
+                          {locationFilter}
+                        </h3>
+                        <div className="p-4 space-y-4">
+                          {locationFilter === 'MRV811' || locationFilter === 'RFV811' ? (
+                            // For MRV811 and RFV811, display Set 1, Set 2, etc.
+                            locationFilter === 'MRV811' ? (
+                              <div className="grid grid-cols-3 gap-6">
+                                {Array.from({ length: 12 }, (_, i) => `Set ${i + 1}`).map((setNumber) => (
+                                  <div key={setNumber} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                        {setNumber}
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-y-2">
+                                      <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                        Backplate
+                                      </div>
+                                      <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                        {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.serial_number || '-'}
+                                      </div>
+                                      <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                        Cylinder
+                                      </div>
+                                      <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                        {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.cylinder_serial || '-'}
+                                      </div>
+                                    </div>
+                                    {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.service_due_date ?? null) && (
+                                      <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
+                                        <AlertCircle className="h-3 w-3" />
+                                        <span>Service Due</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              // For RFV811, keep the vertical layout
+                              Array.from({ length: 4 }, (_, i) => `Set ${i + 1}`).map((setNumber) => (
+                                <div key={setNumber} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                      {setNumber}
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-y-2">
+                                    <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                      Backplate
+                                    </div>
+                                    <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                      {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.serial_number || '-'}
+                                    </div>
+                                    <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                      Cylinder
+                                    </div>
+                                    <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                      {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.cylinder_serial || '-'}
+                                    </div>
+                                  </div>
+                                  {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.service_due_date ?? null) && (
+                                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Service Due</span>
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                            )
+                          ) : locationFilter === 'SPARE' ? (
+                            // For SPARE, just list all spare backplates
+                            (groupedBackplates[locationFilter] || []).map((backplate, index) => (
+                              <div 
+                                key={backplate.id}
+                                className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm"
+                              >
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                    {setNumber}
+                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : `Spare ${index + 1}`}
                                   </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
@@ -710,164 +928,95 @@ export default function BAMasterList() {
                                     Backplate
                                   </div>
                                   <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                    {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.serial_number || '-'}
+                                    {backplate.serial_number || '-'}
                                   </div>
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
                                     Cylinder
                                   </div>
                                   <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                    {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.cylinder_serial || '-'}
+                                    {backplate.cylinder_serial || '-'}
                                   </div>
                                 </div>
-                                {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.service_due_date ?? null) && (
+                                {isServiceDueThisMonth(backplate.service_due_date) && (
                                   <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
                                     <AlertCircle className="h-3 w-3" />
                                     <span>Service Due</span>
                                   </div>
                                 )}
                               </div>
-                            ))}
-                          </div>
-                        ) : (
-                          // For RFV811, keep the vertical layout
-                          Array.from({ length: 4 }, (_, i) => `Set ${i + 1}`).map((setNumber) => (
-                            <div key={setNumber} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                  {setNumber}
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-2 gap-y-2">
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Backplate
+                            ))
+                          ) : locationFilter === 'Others' ? (
+                            // For Others, use the actual role from the location
+                            (groupedBackplates[locationFilter] || []).map((backplate) => (
+                              <div key={backplate.id} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : backplate.location || 'Unknown'}
+                                  </span>
                                 </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.serial_number || '-'}
+                                <div className="grid grid-cols-2 gap-y-2">
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Backplate
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {backplate.serial_number || '-'}
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Cylinder
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {backplate.cylinder_serial || '-'}
+                                  </div>
                                 </div>
-                                <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                  Cylinder
+                                {isServiceDueThisMonth(backplate.service_due_date) && (
+                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
+                                    <AlertCircle className="h-3 w-3" />
+                                    <span>Service Due</span>
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            // For LF811, LF812, and others, display SC, PO, FF1, FF2
+                            ['SC', 'PO', 'FF1', 'FF2'].map((role) => (
+                              <div key={role} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                    {role}
+                                  </span>
                                 </div>
-                                <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                  {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.cylinder_serial || '-'}
+                                <div className="grid grid-cols-2 gap-y-2">
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Backplate
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === role)?.serial_number || '-'}
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Cylinder
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === role)?.cylinder_serial || '-'}
+                                  </div>
                                 </div>
+                                {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === role)?.service_due_date ?? null) && (
+                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
+                                    <AlertCircle className="h-3 w-3" />
+                                    <span>Service Due</span>
+                                  </div>
+                                )}
                               </div>
-                              {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.service_due_date ?? null) && (
-                                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                  <AlertCircle className="h-3 w-3" />
-                                  <span>Service Due</span>
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        )
-                      ) : locationFilter === 'SPARE' ? (
-                        // For SPARE, just list all spare backplates
-                        (groupedBackplates[locationFilter] || []).map((backplate, index) => (
-                          <div 
-                        key={index}
-                            className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm"
-                          >
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                Spare {index + 1}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-y-2">
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                Backplate
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                {backplate.serial_number || '-'}
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                Cylinder
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                {backplate.cylinder_serial || '-'}
-                              </div>
-                            </div>
-                            {isServiceDueThisMonth(backplate.service_due_date) && (
-                              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                <AlertCircle className="h-3 w-3" />
-                                <span>Service Due</span>
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      ) : locationFilter === 'Others' ? (
-                        // For Others, use CFS811 as the role
-                        ['CFS811'].map((role) => (
-                          <div key={role} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                {role}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-y-2">
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                Backplate
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                {(groupedBackplates[locationFilter] || []).find(b => b.location?.includes(role))?.serial_number || '-'}
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                Cylinder
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                {(groupedBackplates[locationFilter] || []).find(b => b.location?.includes(role))?.cylinder_serial || '-'}
-                              </div>
-                            </div>
-                            {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => b.location?.includes(role))?.service_due_date ?? null) && (
-                              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                <AlertCircle className="h-3 w-3" />
-                                <span>Service Due</span>
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      ) : (
-                        // For LF811, LF812, and others, display SC, PO, FF1, FF2
-                        ['SC', 'PO', 'FF1', 'FF2'].map((role) => (
-                          <div key={role} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                {role}
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-y-2">
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                Backplate
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === role)?.serial_number || '-'}
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                Cylinder
-                              </div>
-                              <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === role)?.cylinder_serial || '-'}
-                              </div>
-                            </div>
-                            {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === role)?.service_due_date ?? null) && (
-                              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                <AlertCircle className="h-3 w-3" />
-                                <span>Service Due</span>
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      )}
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
-                </div>
-            ) : (
-              <div className="bg-gray-200 dark:bg-[#2E2521] border border-gray-200 dark:border-[#FCF6EC]/20 rounded-md overflow-hidden">
-                {tableView}
-            </div>
-          )}
-        </div>
-      </main>
+              </div>
+            )}
+          </div>
+        </main>
       </div>
     </div>
   )
@@ -875,7 +1024,7 @@ export default function BAMasterList() {
 
 function StatCard({ title, value }: { title: string; value: number }) {
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col items-center md:items-start space-y-1">
       <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">{title}</p>
       <p className="text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{value}</p>
     </div>
