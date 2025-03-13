@@ -346,7 +346,7 @@ export default function ManningList() {
     const firstRowPositions = ['OOW', 'ENG/EMT', 'STEERSMAN'];
     const secondRowPositions = ['NAV', 'FF1', 'FF2'];
 
-    return (
+                return (
       <div className="p-4 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-md bg-white dark:bg-[#2E2521]/80 shadow-sm">
         {/* Mobile View */}
         <div className="md:hidden space-y-6">
@@ -538,11 +538,11 @@ export default function ManningList() {
                       a.section === sectionKey && 
                       a.position === (section.positionMap?.[position] || position)
                     )?.personnel_name || '-'}
-                      </div>
+                              </div>
             </div>
               ))}
+            </div>
           </div>
-                </div>
         ))}
       </div>
     );
@@ -738,9 +738,9 @@ export default function ManningList() {
                   value={dateFilter}
                   onChange={handleDateChange}
                   className="w-[120px] bg-transparent border-0 focus-visible:ring-0 text-xs font-['Azeret_Mono'] h-9 p-0"
-                />
-              </div>
-              
+            />
+          </div>
+
               <Dialog>
                 <DialogTrigger asChild>
                   <Button 

@@ -59,6 +59,20 @@
   }
 }
 
+/* Custom animation for consistent pulse effect */
+@keyframes pulse-medium {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.animate-pulse-medium {
+  animation: pulse-medium 0.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 /* Custom styles for BA Master List */
 /* Light theme styles */
 .bg-\[2E2521\] {

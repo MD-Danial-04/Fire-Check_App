@@ -414,11 +414,11 @@ export default function BAMasterList() {
             <div className="flex flex-col items-start">
               <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">SPARE</p>
               <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.spare}</p>
-            </div>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {/* Main Content */}
+      {/* Main Content */}
         <main className="px-6 pb-6">
           {/* Search and Actions */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-6 py-4 md:py-6 max-w-7xl mx-auto">
@@ -542,8 +542,8 @@ export default function BAMasterList() {
 
             {/* Desktop View Toggle and Add Button */}
             <div className="hidden md:flex items-center gap-4">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="icon" 
                 onClick={() => setView(view === 'list' ? 'grouped' : 'list')}
                 className="h-9 w-9"
@@ -555,7 +555,7 @@ export default function BAMasterList() {
                 )}
               </Button>
 
-              <Button 
+              <Button
                 className="bg-neutral-900 hover:bg-neutral-800 h-9 px-3"
               >
                 <Plus className="h-4 w-4 mr-2" /> Add Cylinder
@@ -568,7 +568,7 @@ export default function BAMasterList() {
 
           {/* Content */}
           <div className="py-6 max-w-7xl mx-auto">
-            {view === 'list' ? (
+          {view === 'list' ? (
               <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
                 <div className="overflow-x-auto">
                   {tableView}
@@ -670,7 +670,7 @@ export default function BAMasterList() {
                           <div className="p-4 space-y-4">
                             {(groupedBackplates['RFV811'] || []).map((backplate, index) => (
                               <div 
-                        key={backplate.id}
+                      key={backplate.id}
                                 className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm"
                               >
                                 <div className="flex items-center justify-between mb-2">
@@ -686,7 +686,7 @@ export default function BAMasterList() {
                                   <div className="flex items-center justify-between text-[10px]">
                                     <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Cylinder</span>
                                     <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                      {backplate.cylinder_serial || '-'}
+                        {backplate.cylinder_serial || '-'}
                                     </span>
                                   </div>
                                 </div>
@@ -787,7 +787,7 @@ export default function BAMasterList() {
                               );
                             })}
                           </div>
-                        </div>
+            </div>
                         {/* SPARE */}
                         <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
                           <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
@@ -802,7 +802,7 @@ export default function BAMasterList() {
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                     {getRole(backplate.location) !== '-' ? getRole(backplate.location) : `Spare ${index + 1}`}
-                                  </span>
+                      </span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -915,7 +915,7 @@ export default function BAMasterList() {
                             // For SPARE, just list all spare backplates
                             (groupedBackplates[locationFilter] || []).map((backplate, index) => (
                               <div 
-                                key={backplate.id}
+                          key={backplate.id}
                                 className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm"
                               >
                                 <div className="flex items-center justify-between mb-2">
@@ -965,7 +965,7 @@ export default function BAMasterList() {
                                     Cylinder
                                   </div>
                                   <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                    {backplate.cylinder_serial || '-'}
+                            {backplate.cylinder_serial || '-'}
                                   </div>
                                 </div>
                                 {isServiceDueThisMonth(backplate.service_due_date) && (
@@ -1007,16 +1007,16 @@ export default function BAMasterList() {
                                 )}
                               </div>
                             ))
-                          )}
-                        </div>
+                              )}
+                            </div>
                       </div>
-                    </div>
+                </div>
                   </div>
                 )}
-              </div>
-            )}
-          </div>
-        </main>
+            </div>
+          )}
+        </div>
+      </main>
       </div>
     </div>
   )
