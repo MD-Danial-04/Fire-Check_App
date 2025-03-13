@@ -52,8 +52,8 @@ export function MobileNav() {
 
   return (
     <div className="md:hidden">
-      {/* Fixed top header with menu button and theme toggle */}
-      <div className="fixed top-0 left-0 right-0 flex items-center justify-between p-4 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm border-b border-neutral-200 dark:border-neutral-800 z-50">
+      {/* Minimal top header with just menu button */}
+      <div className="fixed top-0 left-0 right-0 flex items-center p-4 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm border-b border-neutral-200 dark:border-neutral-800 z-50">
         <Button 
           variant="outline"
           size="icon" 
@@ -65,20 +65,6 @@ export function MobileNav() {
             <X className="h-5 w-5" />
           ) : (
             <Menu className="h-5 w-5" />
-          )}
-        </Button>
-
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-          className="h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border-2 border-neutral-300 dark:border-neutral-700 shadow-lg"
-          aria-label="Toggle theme"
-        >
-          {theme === "light" ? (
-            <Sun className="h-5 w-5 text-amber-500" />
-          ) : (
-            <Moon className="h-5 w-5 text-blue-400" />
           )}
         </Button>
       </div>
@@ -100,12 +86,25 @@ export function MobileNav() {
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Header */}
-          <div className="flex items-center p-4 border-b border-neutral-100 dark:border-neutral-800">
+          {/* Header with app name and theme toggle */}
+          <div className="flex items-center justify-between p-4 border-b border-neutral-100 dark:border-neutral-800">
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 rounded-lg bg-neutral-900 dark:bg-neutral-100"></div>
               <span className="text-xl font-medium dark:text-white">FireTrack</span>
             </div>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+              className="h-9 w-9 rounded-lg bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800"
+              aria-label="Toggle theme"
+            >
+              {theme === "light" ? (
+                <Sun className="h-4 w-4 text-amber-500" />
+              ) : (
+                <Moon className="h-4 w-4 text-blue-400" />
+              )}
+            </Button>
           </div>
 
           {/* Navigation */}
