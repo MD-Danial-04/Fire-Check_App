@@ -11,11 +11,14 @@ import {
   HardHat,
   Database,
   Menu,
-  X
+  X,
+  Sun,
+  Moon
 } from 'lucide-react'
 import { ThemeToggle } from '@/app/components/ui/theme-toggle'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { useTheme } from '@/app/providers/theme-provider'
 
 const navigation = [
   {
@@ -44,6 +47,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const { theme, setTheme } = useTheme()
 
   // Check if we're on mobile
   useEffect(() => {
@@ -90,9 +94,19 @@ export function Sidebar() {
       {/* Theme toggle - fixed position on mobile */}
       {isMobile && (
         <div className="fixed top-4 right-4 z-50">
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-full p-2 shadow-md">
-            <ThemeToggle />
-          </div>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            className="h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border-2 border-neutral-300 dark:border-neutral-700 shadow-lg"
+            aria-label="Toggle theme"
+          >
+            {theme === "light" ? (
+              <Sun className="h-5 w-5 text-amber-500" />
+            ) : (
+              <Moon className="h-5 w-5 text-blue-400" />
+            )}
+          </Button>
         </div>
       )}
 
