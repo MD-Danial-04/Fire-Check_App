@@ -72,9 +72,9 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Mobile menu button - only visible on small screens */}
+      {/* Mobile menu button and theme toggle container - only visible on small screens */}
       {isMobile && (
-        <div className="fixed top-4 left-4 z-50">
+        <div className="fixed top-0 left-0 right-0 flex items-center justify-between p-4 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm border-b border-neutral-200 dark:border-neutral-800 z-50">
           <Button
             variant="outline"
             size="icon"
@@ -88,12 +88,7 @@ export function Sidebar() {
               <Menu className="h-5 w-5" />
             )}
           </Button>
-        </div>
-      )}
 
-      {/* Theme toggle - fixed position on mobile */}
-      {isMobile && (
-        <div className="fixed top-4 right-4 z-50">
           <Button
             variant="outline"
             size="icon"
@@ -114,7 +109,7 @@ export function Sidebar() {
       <aside 
         className={cn(
           "w-64 border-r border-neutral-100 bg-white dark:bg-neutral-900 dark:border-neutral-800 p-4 flex flex-col h-screen",
-          isMobile ? "fixed inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out" : "",
+          isMobile ? "fixed inset-y-0 left-0 z-40 transform transition-transform duration-300 ease-in-out mt-[73px]" : "",
           isMobile && !isMobileMenuOpen ? "-translate-x-full" : "translate-x-0"
         )}
       >
