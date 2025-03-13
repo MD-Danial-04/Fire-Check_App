@@ -52,22 +52,20 @@ export function MobileNav() {
 
   return (
     <div className="md:hidden">
-      {/* Minimal top header with just menu button */}
-      <div className="fixed top-0 left-0 right-0 flex items-center p-4 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm border-b border-neutral-200 dark:border-neutral-800 z-50">
-        <Button 
-          variant="outline"
-          size="icon" 
-          onClick={toggleMenu}
-          aria-label="Toggle menu"
-          className="h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-md"
-        >
-          {isOpen ? (
-            <X className="h-5 w-5" />
-          ) : (
-            <Menu className="h-5 w-5" />
-          )}
-        </Button>
-      </div>
+      {/* Menu button */}
+      <Button 
+        variant="outline"
+        size="icon" 
+        onClick={toggleMenu}
+        aria-label="Toggle menu"
+        className="fixed top-4 left-4 z-50 h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-md"
+      >
+        {isOpen ? (
+          <X className="h-5 w-5" />
+        ) : (
+          <Menu className="h-5 w-5" />
+        )}
+      </Button>
 
       {/* Overlay */}
       {isOpen && (
@@ -81,7 +79,7 @@ export function MobileNav() {
       {/* Mobile menu */}
       <div 
         className={cn(
-          "fixed top-0 left-0 z-50 h-screen w-3/4 max-w-sm bg-white dark:bg-neutral-900 shadow-lg transform transition-transform duration-200 ease-in-out mt-[73px]",
+          "fixed top-0 left-0 z-50 h-screen w-3/4 max-w-sm bg-white dark:bg-neutral-900 shadow-lg transform transition-transform duration-200 ease-in-out",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
