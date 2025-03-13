@@ -52,20 +52,23 @@ export function MobileNav() {
 
   return (
     <div className="md:hidden">
-      {/* Menu button */}
-      <Button 
-        variant="outline"
-        size="icon" 
-        onClick={toggleMenu}
-        aria-label="Toggle menu"
-        className="fixed top-4 left-4 z-50 h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-md"
-      >
-        {isOpen ? (
-          <X className="h-5 w-5" />
-        ) : (
-          <Menu className="h-5 w-5" />
-        )}
-      </Button>
+      {/* Header with menu button */}
+      <div className="flex items-center gap-3 p-4">
+        <Button 
+          variant="outline"
+          size="icon" 
+          onClick={toggleMenu}
+          aria-label="Toggle menu"
+          className="h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-md flex-shrink-0"
+        >
+          {isOpen ? (
+            <X className="h-5 w-5" />
+          ) : (
+            <Menu className="h-5 w-5" />
+          )}
+        </Button>
+        <span className="text-xl font-medium">FireTrack</span>
+      </div>
 
       {/* Overlay */}
       {isOpen && (
