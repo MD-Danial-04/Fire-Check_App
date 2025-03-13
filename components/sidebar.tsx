@@ -88,8 +88,8 @@ export function Sidebar() {
       )}
 
       {/* Theme toggle - fixed position on mobile */}
-      {isMobile && !isMobileMenuOpen && (
-        <div className="fixed bottom-4 right-4 z-50">
+      {isMobile && (
+        <div className="fixed top-4 right-4 z-50">
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-full p-2 shadow-md">
             <ThemeToggle />
           </div>
@@ -110,10 +110,8 @@ export function Sidebar() {
             <span className="text-xl font-medium dark:text-white">FireTrack</span>
           </div>
           
-          {/* Theme toggle inside sidebar - visible on desktop or when mobile menu is open */}
-          {(!isMobile || isMobileMenuOpen) && (
-            <ThemeToggle />
-          )}
+          {/* Theme toggle inside sidebar - always visible */}
+          <ThemeToggle />
         </div>
         
         <nav className="mt-6 space-y-1 flex-1 overflow-y-auto">
