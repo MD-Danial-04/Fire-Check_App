@@ -1,13 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 
-export default function RelaySubmission() {
+// Create a client component that uses useSearchParams
+function RelaySubmissionClient() {
   const searchParams = useSearchParams()
   const responseId = searchParams.get('responseId')
   const personName = searchParams.get('personName')
@@ -120,4 +121,13 @@ export default function RelaySubmission() {
       </Card>
     </div>
   )
+}
+
+// Export the page component with Suspense boundary
+export default function RelaySubmission() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <RelaySubmissionClient />
+    </Suspense>
+  );
 } 

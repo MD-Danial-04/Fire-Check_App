@@ -1,7 +1,7 @@
 'use client'
 
 import { createBrowserClient } from '@supabase/ssr'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import React from 'react'
 import { Search, ExternalLink, Copy, Plus, Clipboard, FileCheck } from 'lucide-react'
 import { Input } from "@/components/ui/input"
@@ -46,7 +46,8 @@ interface GroupedPersonnel {
   lfav_cylinder: string | null;
 }
 
-export default function PPECheck() {
+// Create a client component that uses useSearchParams
+function PPECheckClient() {
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -1383,5 +1384,14 @@ export default function PPECheck() {
         </Dialog>
       </div>
     </div>
+  );
+}
+
+// Export the page component with Suspense boundary
+export default function PPECheck() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <PPECheckClient />
+    </Suspense>
   );
 } 
