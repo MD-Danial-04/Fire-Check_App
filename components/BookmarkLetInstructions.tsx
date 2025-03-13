@@ -1,14 +1,32 @@
 // components/BookmarkletInstructions.tsx
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Bookmark, ChevronDown, ChevronUp, Copy, X, Info, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Bookmark, ChevronDown, ChevronUp, Copy, X, Info, CheckCircle2, AlertCircle, Smartphone } from 'lucide-react';
+import Link from 'next/link';
 
 export default function BookmarkletInstructions() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const bookmarkRef = useRef<HTMLAnchorElement>(null);
+
+  // Check if we're on mobile
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+    };
+    
+    // Initial check
+    checkIfMobile();
+    
+    // Add event listener
+    window.addEventListener('resize', checkIfMobile);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', checkIfMobile);
+  }, []);
 
   const bookmarkletCode = `javascript:(function(){var t=document.body.innerText,e=t.match(/Response ID:?\\s*([a-zA-Z0-9]+)/i)||t.match(/([a-f0-9]{24,32})/i),n="";try{var r=window.location.href;if(r.includes("form.gov.sg")){var a=new URLSearchParams(window.location.search);if(a.has("6502c44bde2cb10011b4d19e"))n=decodeURIComponent(a.get("6502c44bde2cb10011b4d19e").replace(/\\+/g," "));else{var o=["name","person","personnel"];for(var i=0;i<o.length;i++){var s=o[i];if(a.has(s)){n=decodeURIComponent(a.get(s).replace(/\\+/g," "));break}}}}else n=document.title.split(" - ")[0]||""}catch(t){console.error("Error extracting name:",t)}if(e&&e[1]){var l=e[1],c=document.createElement("div");c.id="form-response-helper";c.style.cssText="position:fixed;top:20px;right:20px;padding:15px;background:#f0f8ff;border:1px solid #007bff;border-radius:5px;z-index:9999;box-shadow:0 4px 8px rgba(0,0,0,0.1);font-family:system-ui,-apple-system,sans-serif;transition:all 0.3s ease;";c.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h3 style="margin:0;color:#007bff;font-size:16px;font-weight:600;">Response ID Captured</h3><div><button id="minimizeHelper" style="background:none;border:none;color:#007bff;cursor:pointer;font-size:16px;margin-right:5px;padding:0;line-height:1;" title="Minimize">_</button><button id="closeHelper" style="background:none;border:none;color:#007bff;cursor:pointer;font-size:16px;padding:0;line-height:1;" title="Close">×</button></div></div><div id="helperContent"><div style="font-family:monospace;font-size:16px;padding:8px;background:#e6f2ff;border-radius:3px;margin-bottom:10px;word-break:break-all;">'+l+'</div><div style="font-size:14px;margin-bottom:8px;color:#555;">Person: '+(n||"Not detected")+'</div><button id="copyId" style="background:#007bff;color:white;border:none;border-radius:4px;padding:8px 16px;cursor:pointer;width:100%;margin-bottom:8px;font-family:inherit;">Copy Response ID</button><button id="submitDirectly" style="background:#ff7f00;color:white;border:none;border-radius:4px;padding:8px 16px;cursor:pointer;width:100%;margin-bottom:8px;font-family:inherit;">Submit via Relay Page</button><button id="returnToApp" style="background:#28a745;color:white;border:none;border-radius:4px;padding:8px 16px;cursor:pointer;width:100%;margin-bottom:8px;font-family:inherit;">Return to App with ID</button><div id="statusMessages"></div></div>';document.body.appendChild(c);document.getElementById("minimizeHelper").onclick=function(){var content=document.getElementById("helperContent");if(content.style.display==="none"){content.style.display="block";this.textContent="_";this.title="Minimize";}else{content.style.display="none";this.textContent="□";this.title="Restore";}};document.getElementById("closeHelper").onclick=function(){document.body.removeChild(document.getElementById("form-response-helper"));};document.getElementById("copyId").onclick=function(){navigator.clipboard.writeText(l).then(function(){document.getElementById("copyId").textContent="Copied!";setTimeout(function(){document.getElementById("copyId").textContent="Copy Response ID"},2e3)})};document.getElementById("submitDirectly").onclick=function(){var targetOrigin="https://fire-check-app.vercel.app";window.open(targetOrigin+"/relay-submission?responseId="+l+"&personName="+encodeURIComponent(n),"_blank")};document.getElementById("returnToApp").onclick=function(){var targetOrigin="https://fire-check-app.vercel.app";window.open(targetOrigin+"/ppe-check?responseId="+l+"&personName="+encodeURIComponent(n),"_blank")}}else alert("No Response ID found on this page. Please make sure you're on a form submission confirmation page.")})();`;
 
@@ -74,6 +92,52 @@ export default function BookmarkletInstructions() {
         <Bookmark className="h-4 w-4 mr-2 text-amber-600 dark:text-amber-400" />
         Form Helper
       </Button>
+    );
+  }
+
+  // If on mobile, show a simplified card with a link to the mobile setup page
+  if (isMobile) {
+    return (
+      <Card className="relative border border-amber-200 bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-amber-950/40 dark:to-amber-900/30 dark:border-amber-800/50 shadow-sm">
+        <div className="absolute right-2 top-2">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-6 w-6 text-amber-600 hover:text-amber-700 hover:bg-amber-100/70 dark:text-amber-400 dark:hover:bg-amber-900/50 rounded-full"
+            onClick={() => setIsVisible(false)}
+            aria-label="Close"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="bg-amber-100 dark:bg-amber-800/50 p-1.5 rounded-full">
+              <Bookmark className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <h3 className="font-medium text-amber-800 dark:text-amber-300">Form Response Helper</h3>
+          </div>
+          
+          <div className="bg-amber-100/70 dark:bg-amber-900/30 rounded-lg p-3 border border-amber-200 dark:border-amber-800/50 mb-4">
+            <div className="flex gap-2">
+              <Smartphone className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-sm text-amber-800 dark:text-amber-300">Mobile Device Detected</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  We've created a special guide for mobile users
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <Link href="/mobile-bookmarklet" passHref>
+            <Button className="w-full">
+              Open Mobile Setup Guide
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
     );
   }
 

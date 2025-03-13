@@ -3,7 +3,7 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { useEffect, useState, Suspense } from 'react'
 import React from 'react'
-import { Search, ExternalLink, Copy, Plus, Clipboard, FileCheck } from 'lucide-react'
+import { Search, ExternalLink, Copy, Plus, Clipboard, FileCheck, Smartphone, Bookmark } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -75,9 +75,26 @@ function PPECheckClient() {
   const [tempPersonName, setTempPersonName] = useState<string | null>(null);
   const [showPersonSelectionDialog, setShowPersonSelectionDialog] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   // Define the exact grouping order
   const groupingOrder = ["REGULARS", "NS SECTION COMMANDER", "NS MARINE FIREFIGHTER", "ORNS/VES"];
+
+  // Check if we're on mobile
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent));
+    };
+    
+    // Initial check
+    checkIfMobile();
+    
+    // Add event listener
+    window.addEventListener('resize', checkIfMobile);
+    
+    // Cleanup
+    return () => window.removeEventListener('resize', checkIfMobile);
+  }, []);
 
   // Add rank order function
   const getRankOrder = (name: string) => {
@@ -838,19 +855,50 @@ function PPECheckClient() {
   );
 
   return (
-    <div className="flex-1 p-4 md:p-8 overflow-auto">
-      <div className="max-w-7xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex flex-col space-y-6">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <h1 className="text-2xl font-bold">PPE Check</h1>
+          <div className="flex flex-wrap gap-2">
+            {isMobile && (
+              <Link href="/mobile-bookmarklet" passHref>
+                <Button variant="outline" size="sm" className="flex items-center gap-1.5">
+                  <Smartphone className="h-4 w-4" />
+                  Mobile Bookmarklet
+                </Button>
+              </Link>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDialogOpen(true)}
+              className="flex items-center gap-1.5"
+            >
+              <Bookmark className="h-4 w-4" />
+              Bookmarklet Instructions
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResetConfirmation(true)}
+              className="flex items-center gap-1.5"
+            >
+              <FileCheck className="h-4 w-4" />
+              Reset All Checks
+            </Button>
+          </div>
+        </div>
+
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <h1 className="text-2xl font-bold">PPE Check</h1>
             <Link href="/equipment-checklist" passHref>
               <Button variant="outline" className="hidden sm:flex items-center gap-2">
                 <Clipboard className="h-4 w-4" />
                 Equipment Checklist
-          </Button>
+              </Button>
             </Link>
-        </div>
+          </div>
           <div className="relative w-full sm:w-64 md:w-80">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
             <Input 
@@ -872,7 +920,7 @@ function PPECheckClient() {
               Equipment Checklist
             </Button>
           </Link>
-          </div>
+        </div>
 
         {/* Bookmarklet Instructions */}
         <BookmarkletInstructions />
