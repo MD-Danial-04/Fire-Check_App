@@ -19,6 +19,43 @@ export default function MobileBookmarklet() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Function to open a test page with a valid response ID
+  const openTestPage = () => {
+    const testPageHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>SGT1 Danial - Form Submission</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.5; padding: 1rem; max-width: 800px; margin: 0 auto; }
+          .container { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; }
+          .success-icon { color: green; font-size: 3rem; text-align: center; margin-bottom: 1rem; }
+          .response-id { font-family: monospace; background: #f5f5f5; padding: 0.5rem; border-radius: 4px; margin: 1rem 0; word-break: break-all; }
+          h1 { color: #333; font-size: 1.5rem; }
+          p { color: #555; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="success-icon">✓</div>
+          <h1>Thank you for filling out the form.</h1>
+          <p>Your submission has been received successfully.</p>
+          <p>Response ID: <span class="response-id">65031149356d470012810f7f</span></p>
+          <p>Please use the Form Response Helper bookmarklet to capture this ID.</p>
+          <p><small>This is a test page to demonstrate the bookmarklet functionality.</small></p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const testWindow = window.open('', '_blank');
+    if (testWindow) {
+      testWindow.document.write(testPageHtml);
+      testWindow.document.close();
+    }
+  };
+
   const handleShare = async () => {
     try {
       if (navigator.share) {
@@ -118,6 +155,39 @@ export default function MobileBookmarklet() {
                   </div>
                 </div>
               </div>
+
+              <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                <p className="text-xs mb-2">Or click this button to test it directly:</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs h-10 bg-green-100 text-green-700 border-green-300 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800/50 dark:hover:bg-green-800/50 flex items-center justify-center gap-2"
+                  onClick={() => {
+                    // Create a temporary link and click it
+                    const tempLink = document.createElement('a');
+                    tempLink.href = bookmarkletCode;
+                    document.body.appendChild(tempLink);
+                    tempLink.click();
+                    document.body.removeChild(tempLink);
+                  }}
+                >
+                  Test Bookmarklet Now
+                </Button>
+                
+                <div className="mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-xs h-10 bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 dark:hover:bg-blue-800/50 flex items-center justify-center gap-2"
+                    onClick={openTestPage}
+                  >
+                    Open Test Page
+                  </Button>
+                  <p className="text-xs mt-1 text-gray-500 text-center">
+                    Opens a sample form confirmation page to test the bookmarklet
+                  </p>
+                </div>
+              </div>
               
               <Button 
                 className="w-full mt-4"
@@ -211,20 +281,36 @@ export default function MobileBookmarklet() {
                 You can test your bookmarklet on a sample form confirmation page:
               </p>
               
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-xs h-10 bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 dark:hover:bg-blue-800/50 flex items-center justify-center gap-2"
-                asChild
-              >
-                <Link href="https://form.gov.sg/submission-successful?id=65031149356d470012810f7f" target="_blank">
-                  <ExternalLink className="h-4 w-4" />
-                  Open Test Form Confirmation
-                </Link>
-              </Button>
+              <div className="space-y-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs h-10 bg-green-100 text-green-700 border-green-300 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800/50 dark:hover:bg-green-800/50 flex items-center justify-center gap-2"
+                  onClick={() => {
+                    // Create a temporary link and click it
+                    const tempLink = document.createElement('a');
+                    tempLink.href = bookmarkletCode;
+                    document.body.appendChild(tempLink);
+                    tempLink.click();
+                    document.body.removeChild(tempLink);
+                  }}
+                >
+                  Test Bookmarklet Now
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs h-10 bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800/50 dark:hover:bg-blue-800/50 flex items-center justify-center gap-2"
+                  onClick={openTestPage}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open Test Page
+                </Button>
+              </div>
               
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-4">
-                Once on the test page, use your bookmarklet to capture the Response ID.
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                The test page contains a sample Response ID (65031149356d470012810f7f) that you can capture with your bookmarklet.
               </p>
               
               <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-100 dark:border-amber-800/30 mt-2">
