@@ -859,39 +859,6 @@ function PPECheckClient() {
       <div className="flex flex-col space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h1 className="text-2xl font-bold">PPE Check</h1>
-          <div className="flex flex-wrap gap-2">
-            {isMobile && (
-              <Link href="/mobile-bookmarklet" passHref>
-                <Button variant="outline" size="sm" className="flex items-center gap-1.5">
-                  <Smartphone className="h-4 w-4" />
-                  Mobile Bookmarklet
-                </Button>
-              </Link>
-            )}
-            {/* Only show these buttons on desktop */}
-            {!isMobile && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsDialogOpen(true)}
-                  className="flex items-center gap-1.5"
-                >
-                  <Bookmark className="h-4 w-4" />
-                  Bookmarklet Instructions
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowResetConfirmation(true)}
-                  className="flex items-center gap-1.5"
-                >
-                  <FileCheck className="h-4 w-4" />
-                  Reset All Checks
-                </Button>
-              </>
-            )}
-          </div>
         </div>
 
         {/* Header */}
@@ -926,30 +893,6 @@ function PPECheckClient() {
             </Button>
           </Link>
         </div>
-
-        {/* Mobile-only buttons for Bookmarklet Instructions and Reset */}
-        {isMobile && (
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsDialogOpen(true)}
-              className="flex-1 flex items-center justify-center gap-1.5"
-            >
-              <Bookmark className="h-4 w-4" />
-              Bookmarklet Instructions
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowResetConfirmation(true)}
-              className="flex-1 flex items-center justify-center gap-1.5"
-            >
-              <FileCheck className="h-4 w-4" />
-              Reset All Checks
-            </Button>
-          </div>
-        )}
 
         {/* Bookmarklet Instructions */}
         <BookmarkletInstructions />
