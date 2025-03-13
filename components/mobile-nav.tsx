@@ -52,14 +52,14 @@ export function MobileNav() {
 
   return (
     <div className="md:hidden">
-      {/* Header with menu button */}
-      <div className="flex items-center gap-3 p-4">
+      {/* Menu button */}
+      <div className="p-4">
         <Button 
           variant="outline"
           size="icon" 
           onClick={toggleMenu}
           aria-label="Toggle menu"
-          className="h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-md flex-shrink-0"
+          className="h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-md"
         >
           {isOpen ? (
             <X className="h-5 w-5" />
@@ -67,7 +67,6 @@ export function MobileNav() {
             <Menu className="h-5 w-5" />
           )}
         </Button>
-        <span className="text-xl font-medium">FireTrack</span>
       </div>
 
       {/* Overlay */}
