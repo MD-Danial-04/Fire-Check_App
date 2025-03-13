@@ -10,10 +10,13 @@ import {
   Users,
   HardHat,
   Menu,
-  X
+  X,
+  Sun,
+  Moon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/app/components/ui/theme-toggle'
+import { useTheme } from '@/app/providers/theme-provider'
 
 // Navigation items - same as in the sidebar
 const navigation = [
@@ -42,22 +45,43 @@ const navigation = [
 export function MobileNav() {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
+  const { theme, setTheme } = useTheme()
 
   const toggleMenu = () => setIsOpen(!isOpen)
   const closeMenu = () => setIsOpen(false)
 
   return (
     <div className="md:hidden">
-      {/* Mobile menu button */}
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        onClick={toggleMenu}
-        aria-label="Toggle menu"
-        className="text-neutral-500"
-      >
-        <Menu className="h-5 w-5" />
-      </Button>
+      {/* Fixed top header with menu button and theme toggle */}
+      <div className="fixed top-0 left-0 right-0 flex items-center justify-between p-4 bg-white/80 dark:bg-neutral-900/80 backdrop-blur-sm border-b border-neutral-200 dark:border-neutral-800 z-50">
+        <Button 
+          variant="outline"
+          size="icon" 
+          onClick={toggleMenu}
+          aria-label="Toggle menu"
+          className="h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-md"
+        >
+          {isOpen ? (
+            <X className="h-5 w-5" />
+          ) : (
+            <Menu className="h-5 w-5" />
+          )}
+        </Button>
+
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+          className="h-10 w-10 rounded-full bg-white dark:bg-neutral-900 border-2 border-neutral-300 dark:border-neutral-700 shadow-lg"
+          aria-label="Toggle theme"
+        >
+          {theme === "light" ? (
+            <Sun className="h-5 w-5 text-amber-500" />
+          ) : (
+            <Moon className="h-5 w-5 text-blue-400" />
+          )}
+        </Button>
+      </div>
 
       {/* Overlay */}
       {isOpen && (
@@ -71,26 +95,17 @@ export function MobileNav() {
       {/* Mobile menu */}
       <div 
         className={cn(
-          "fixed top-0 left-0 z-50 h-screen w-3/4 max-w-sm bg-white dark:bg-neutral-900 shadow-lg transform transition-transform duration-200 ease-in-out",
+          "fixed top-0 left-0 z-50 h-screen w-3/4 max-w-sm bg-white dark:bg-neutral-900 shadow-lg transform transition-transform duration-200 ease-in-out mt-[73px]",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-neutral-100 dark:border-neutral-800">
+          <div className="flex items-center p-4 border-b border-neutral-100 dark:border-neutral-800">
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 rounded-lg bg-neutral-900 dark:bg-neutral-100"></div>
               <span className="text-xl font-medium dark:text-white">FireTrack</span>
             </div>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={closeMenu}
-              aria-label="Close menu"
-              className="text-neutral-500"
-            >
-              <X className="h-5 w-5" />
-            </Button>
           </div>
 
           {/* Navigation */}
@@ -124,8 +139,7 @@ export function MobileNav() {
           {/* Footer */}
           <div className="border-t border-neutral-100 dark:border-neutral-800 p-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-neutral-500 dark:text-neutral-400">Theme</span>
-              <ThemeToggle />
+              <span className="text-sm text-neutral-500 dark:text-neutral-400">v1.0.0</span>
             </div>
           </div>
         </div>
