@@ -868,24 +868,29 @@ function PPECheckClient() {
                 </Button>
               </Link>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setIsDialogOpen(true)}
-              className="flex items-center gap-1.5"
-            >
-              <Bookmark className="h-4 w-4" />
-              Bookmarklet Instructions
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowResetConfirmation(true)}
-              className="flex items-center gap-1.5"
-            >
-              <FileCheck className="h-4 w-4" />
-              Reset All Checks
-            </Button>
+            {/* Only show these buttons on desktop */}
+            {!isMobile && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsDialogOpen(true)}
+                  className="flex items-center gap-1.5"
+                >
+                  <Bookmark className="h-4 w-4" />
+                  Bookmarklet Instructions
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowResetConfirmation(true)}
+                  className="flex items-center gap-1.5"
+                >
+                  <FileCheck className="h-4 w-4" />
+                  Reset All Checks
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -921,6 +926,30 @@ function PPECheckClient() {
             </Button>
           </Link>
         </div>
+
+        {/* Mobile-only buttons for Bookmarklet Instructions and Reset */}
+        {isMobile && (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDialogOpen(true)}
+              className="flex-1 flex items-center justify-center gap-1.5"
+            >
+              <Bookmark className="h-4 w-4" />
+              Bookmarklet Instructions
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowResetConfirmation(true)}
+              className="flex-1 flex items-center justify-center gap-1.5"
+            >
+              <FileCheck className="h-4 w-4" />
+              Reset All Checks
+            </Button>
+          </div>
+        )}
 
         {/* Bookmarklet Instructions */}
         <BookmarkletInstructions />
