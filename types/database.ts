@@ -16,6 +16,11 @@ export interface Database {
         Insert: Omit<ManningList, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<ManningList, 'id' | 'created_at' | 'updated_at'>>
       }
+      vehicle_configs: {
+        Row: VehicleConfig
+        Insert: Omit<VehicleConfig, 'id' | 'created_at' | 'updated_at'>
+        Update: Partial<Omit<VehicleConfig, 'id' | 'created_at' | 'updated_at'>>
+      }
     }
   }
 }
@@ -62,6 +67,15 @@ export interface ManningList {
   name: string | null
   status: string | null
   vessel: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface VehicleConfig {
+  id: number
+  name: string
+  plate_number: string
+  section: string
   created_at: string
   updated_at: string
 } 
