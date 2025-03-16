@@ -1,6 +1,6 @@
 'use client'
 
-import { Bell, Settings, Search, Plus } from 'lucide-react';
+import { Bell, Settings, Search, Plus, ChevronDown, ChevronUp, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -26,12 +26,17 @@ interface ActivityItemProps {
   section?: string;
   itemName?: string;
   personnel?: string;
+  rawTimestamp?: number;
 }
 
 interface PendingItemProps {
   name: string;
   section?: string;
   type: 'ppe' | 'equipment';
+  assignedTo?: string;
+  role?: string;
+  suggestedAssignee?: string;
+  suggestedRole?: string;
 }
 
 // Sample data for charts
@@ -97,6 +102,30 @@ export default function Dashboard() {
   const [isPendingItemsExpanded, setIsPendingItemsExpanded] = useState(true)
   const [isRecentActivityExpanded, setIsRecentActivityExpanded] = useState(true)
   const [isViewAllActivity, setIsViewAllActivity] = useState(false)
+  const [ppeStatusView, setPpeStatusView] = useState<'completed' | 'pending' | 'none'>('none')
+  const [completedPersonnel, setCompletedPersonnel] = useState<PendingItemProps[]>([])
+  // Add new state for equipment sections
+  const [equipmentSectionView, setEquipmentSectionView] = useState<'armoury' | 'vehicleFPT' | 'vehicleLPT' | 'bwc' | 'none'>('none')
+  const [equipmentSectionItems, setEquipmentSectionItems] = useState<{
+    armoury: { completed: PendingItemProps[], pending: PendingItemProps[] },
+    vehicleFPT: { completed: PendingItemProps[], pending: PendingItemProps[] },
+    vehicleLPT: { completed: PendingItemProps[], pending: PendingItemProps[] },
+    bwc: { completed: PendingItemProps[], pending: PendingItemProps[] }
+  }>({
+    armoury: { completed: [], pending: [] },
+    vehicleFPT: { completed: [], pending: [] },
+    vehicleLPT: { completed: [], pending: [] },
+    bwc: { completed: [], pending: [] }
+  })
+
+  // Add state for BWC personnel tracking
+  const [bwcPersonnel, setBwcPersonnel] = useState<{
+    personnel: string;
+    position: string;
+    vehicle: string;
+    hasBwc: boolean;
+    bwcSerial?: string;
+  }[]>([])
 
   useEffect(() => {
     setIsClient(true)
@@ -155,6 +184,16 @@ export default function Dashboard() {
         console.log(`PPE Progress: ${completed}/${total} completed, ${pending} pending`);
         setPpeProgress({ total, completed, inProgress, pending });
 
+        // Track completed personnel for PPE checks
+        const completedPersonnelList: PendingItemProps[] = [];
+        submissionMap.forEach((data, name) => {
+          completedPersonnelList.push({
+            name: name as string,
+            type: 'ppe'
+          });
+        });
+        setCompletedPersonnel(completedPersonnelList);
+
         // Track pending personnel for PPE checks
         const pendingPersonnel: PendingItemProps[] = [];
         uniquePersonnel.forEach(name => {
@@ -208,7 +247,8 @@ export default function Dashboard() {
               timestamp: timeAgo,
               type: 'ppe',
               personnel: submission.personnel_name,
-              status: 'submitted'
+              status: 'submitted',
+              rawTimestamp: submittedAt.getTime()
             };
           });
           
@@ -216,8 +256,12 @@ export default function Dashboard() {
             // Combine with any equipment check activities
             const combinedActivities = [...recentSubmissions, ...prevActivities.filter(a => a.type === 'equipment')];
             
-            // Sort by timestamp (most recent first)
+            // Sort by raw timestamp (most recent first)
             combinedActivities.sort((a, b) => {
+              if (a.rawTimestamp && b.rawTimestamp) {
+                return b.rawTimestamp - a.rawTimestamp;
+              }
+              
               const aTime = a.timestamp.match(/(\d+)/);
               const bTime = b.timestamp.match(/(\d+)/);
               if (!aTime || !bTime) return 0;
@@ -245,6 +289,43 @@ export default function Dashboard() {
           return;
         }
 
+        // Get personnel who should have BWCs
+        const { data: personnelData, error: personnelError } = await supabase
+          .from('personnel_ba_view')
+          .select('personnel_name, vehicle_type, section, position');
+
+        if (personnelError) {
+          console.error('Error fetching personnel data:', personnelError);
+        }
+
+        // Identify the 5 personnel who need BWCs:
+        // MRV811 Duty Officer, LF811 SC, PO, LF812 SC, PO
+        const bwcRequiredPositions = [
+          { vehicle: 'MRV811', position: 'Duty Officer' },
+          { vehicle: 'LF811', position: 'SC' },
+          { vehicle: 'LF811', position: 'PO' },
+          { vehicle: 'LF812', position: 'SC' },
+          { vehicle: 'LF812', position: 'PO' },
+        ];
+
+        // Find personnel matching these positions
+        const bwcRequiredPersonnel = bwcRequiredPositions.map(req => {
+          // Find matching personnel
+          const person = personnelData?.find(p => 
+            (p.vehicle_type === req.vehicle && p.position === req.position) ||
+            // Special case for Duty Officer which might be in COMMAND section
+            (req.position === 'Duty Officer' && p.position === 'Duty Officer')
+          );
+          
+          return {
+            personnel: person?.personnel_name || `${req.vehicle} ${req.position}`,
+            position: req.position,
+            vehicle: req.vehicle,
+            hasBwc: false,
+            bwcSerial: undefined
+          };
+        });
+
         // Group items by section
         const sections = {
           armoury: checklistData?.filter(item => item.section.toUpperCase() === 'ARMOURY') || [],
@@ -252,6 +333,25 @@ export default function Dashboard() {
           vehicleLPT: checklistData?.filter(item => item.section.toUpperCase() === 'VEHICLE LPT') || [],
           bwc: checklistData?.filter(item => item.section.toUpperCase() === 'BWC') || []
         };
+
+        // Check which BWCs are assigned and to whom
+        const assignedBwcs = sections.bwc.filter(item => item.checked && item.assigned_to);
+        
+        // Update BWC personnel tracking
+        const updatedBwcPersonnel = bwcRequiredPersonnel.map(person => {
+          // Check if this person has a BWC assigned
+          const assignedBwc = assignedBwcs.find(bwc => 
+            bwc.assigned_to === person.personnel
+          );
+          
+          return {
+            ...person,
+            hasBwc: !!assignedBwc,
+            bwcSerial: assignedBwc?.name
+          };
+        });
+        
+        setBwcPersonnel(updatedBwcPersonnel);
 
         // Calculate progress for each section
         const progress = {
@@ -264,6 +364,84 @@ export default function Dashboard() {
 
         setEquipmentProgress(progress);
         console.log('Equipment progress updated:', progress);
+
+        // Track equipment items by section for detailed view
+        const sectionItems = {
+          armoury: {
+            completed: sections.armoury
+              .filter(item => item.checked)
+              .map(item => ({
+                name: item.name,
+                section: 'Armoury',
+                type: 'equipment' as const,
+                assignedTo: item.assigned_to
+              })),
+            pending: sections.armoury
+              .filter(item => !item.checked)
+              .map(item => ({
+                name: item.name,
+                section: 'Armoury',
+                type: 'equipment' as const
+              }))
+          },
+          vehicleFPT: {
+            completed: sections.vehicleFPT
+              .filter(item => item.checked)
+              .map(item => ({
+                name: item.name,
+                section: 'Vehicle FPT',
+                type: 'equipment' as const,
+                assignedTo: item.assigned_to
+              })),
+            pending: sections.vehicleFPT
+              .filter(item => !item.checked)
+              .map(item => ({
+                name: item.name,
+                section: 'Vehicle FPT',
+                type: 'equipment' as const
+              }))
+          },
+          vehicleLPT: {
+            completed: sections.vehicleLPT
+              .filter(item => item.checked)
+              .map(item => ({
+                name: item.name,
+                section: 'Vehicle LPT',
+                type: 'equipment' as const,
+                assignedTo: item.assigned_to
+              })),
+            pending: sections.vehicleLPT
+              .filter(item => !item.checked)
+              .map(item => ({
+                name: item.name,
+                section: 'Vehicle LPT',
+                type: 'equipment' as const
+              }))
+          },
+          bwc: {
+            completed: sections.bwc
+              .filter(item => item.checked)
+              .map(item => ({
+                name: item.name,
+                section: 'BWC',
+                type: 'equipment' as const,
+                assignedTo: item.assigned_to,
+                // Add role information for BWC items
+                role: updatedBwcPersonnel.find(p => p.personnel === item.assigned_to)?.position
+              })),
+            pending: updatedBwcPersonnel
+              .filter(person => !person.hasBwc)
+              .map(person => ({
+                name: person.personnel,
+                section: 'BWC',
+                type: 'equipment' as const,
+                suggestedAssignee: person.personnel,
+                suggestedRole: `${person.vehicle} ${person.position}`
+              }))
+          }
+        };
+        
+        setEquipmentSectionItems(sectionItems);
 
         // Track pending equipment items
         const pendingEquipment: PendingItemProps[] = [];
@@ -301,19 +479,16 @@ export default function Dashboard() {
             });
           });
           
-        // Add pending BWC items (only if we have fewer than 5 checked)
-        if (sections.bwc.filter(item => item.checked).length < 5) {
-          sections.bwc
-            .filter(item => !item.checked)
-            .slice(0, 5 - sections.bwc.filter(item => item.checked).length)
-            .forEach(item => {
-              pendingEquipment.push({
-                name: item.name,
-                section: 'BWC',
-                type: 'equipment'
-              });
+        // Add pending BWC items (show all unchecked BWCs)
+        sections.bwc
+          .filter(item => !item.checked)
+          .forEach(item => {
+            pendingEquipment.push({
+              name: item.name,
+              section: 'BWC',
+              type: 'equipment'
             });
-        }
+          });
 
         // Update pending items state with equipment pending items
         setPendingItems(prevItems => {
@@ -362,7 +537,8 @@ export default function Dashboard() {
               type: 'equipment',
               section: item.section,
               itemName: item.name,
-              status: item.checked ? 'completed' : (item.assigned_to ? 'assigned' : 'updated')
+              status: item.checked ? 'completed' : (item.assigned_to ? 'assigned' : 'updated'),
+              rawTimestamp: updatedAt.getTime()
             };
           }) || [];
 
@@ -370,8 +546,12 @@ export default function Dashboard() {
           // Combine with any PPE check activities
           const combinedActivities = [...recentUpdates, ...prevActivities.filter(a => a.type === 'ppe')];
           
-          // Sort by timestamp (most recent first)
+          // Sort by raw timestamp (most recent first)
           combinedActivities.sort((a, b) => {
+            if (a.rawTimestamp && b.rawTimestamp) {
+              return b.rawTimestamp - a.rawTimestamp;
+            }
+            
             const aTime = a.timestamp.match(/(\d+)/);
             const bTime = b.timestamp.match(/(\d+)/);
             if (!aTime || !bTime) return 0;
@@ -576,28 +756,251 @@ export default function Dashboard() {
                     completed={equipmentProgress.armoury.completed}
                     inProgress={0}
                     pending={equipmentProgress.armoury.pending}
+                    sectionKey="armoury"
+                    isSelected={equipmentSectionView === 'armoury'}
+                    onSectionClick={(section) => setEquipmentSectionView(equipmentSectionView === section ? 'none' : section)}
                   />
+                  {equipmentSectionView === 'armoury' && (
+                    <div className="mt-2 border-t border-gray-200 dark:border-neutral-700 pt-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
+                            Completed Items ({equipmentSectionItems.armoury.completed.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {equipmentSectionItems.armoury.completed.length > 0 ? (
+                              equipmentSectionItems.armoury.completed.map((item, index) => (
+                                <div key={`armoury-completed-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center">
+                                      <div className="h-2 w-2 rounded-full mr-2 bg-green-500" aria-hidden="true"></div>
+                                      <div className="text-sm font-medium">{item.name}</div>
+                                    </div>
+                                    {item.assignedTo && (
+                                      <div className="mt-1 ml-4 text-xs text-neutral-500 dark:text-neutral-400">
+                                        Assigned to: {item.assignedTo}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 dark:text-neutral-400">No completed items</div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
+                            Pending Items ({equipmentSectionItems.armoury.pending.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {equipmentSectionItems.armoury.pending.length > 0 ? (
+                              equipmentSectionItems.armoury.pending.map((item, index) => (
+                                <div key={`armoury-pending-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
+                                  <div className="flex items-center">
+                                    <div className="h-2 w-2 rounded-full mr-2 bg-red-500" aria-hidden="true"></div>
+                                    <div className="text-sm">{item.name}</div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 dark:text-neutral-400">No pending items</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <ProgressSection
                     title="Vehicle FPT"
                     total={equipmentProgress.vehicleFPT.total}
                     completed={equipmentProgress.vehicleFPT.completed}
                     inProgress={0}
                     pending={equipmentProgress.vehicleFPT.pending}
+                    sectionKey="vehicleFPT"
+                    isSelected={equipmentSectionView === 'vehicleFPT'}
+                    onSectionClick={(section) => setEquipmentSectionView(equipmentSectionView === section ? 'none' : section)}
                   />
+                  {equipmentSectionView === 'vehicleFPT' && (
+                    <div className="mt-2 border-t border-gray-200 dark:border-neutral-700 pt-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
+                            Completed Items ({equipmentSectionItems.vehicleFPT.completed.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {equipmentSectionItems.vehicleFPT.completed.length > 0 ? (
+                              equipmentSectionItems.vehicleFPT.completed.map((item, index) => (
+                                <div key={`vehicleFPT-completed-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center">
+                                      <div className="h-2 w-2 rounded-full mr-2 bg-green-500" aria-hidden="true"></div>
+                                      <div className="text-sm font-medium">{item.name}</div>
+                                    </div>
+                                    {item.assignedTo && (
+                                      <div className="mt-1 ml-4 text-xs text-neutral-500 dark:text-neutral-400">
+                                        Assigned to: {item.assignedTo}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 dark:text-neutral-400">No completed items</div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
+                            Pending Items ({equipmentSectionItems.vehicleFPT.pending.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {equipmentSectionItems.vehicleFPT.pending.length > 0 ? (
+                              equipmentSectionItems.vehicleFPT.pending.map((item, index) => (
+                                <div key={`vehicleFPT-pending-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
+                                  <div className="flex items-center">
+                                    <div className="h-2 w-2 rounded-full mr-2 bg-red-500" aria-hidden="true"></div>
+                                    <div className="text-sm">{item.name}</div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 dark:text-neutral-400">No pending items</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <ProgressSection
                     title="Vehicle LPT"
                     total={equipmentProgress.vehicleLPT.total}
                     completed={equipmentProgress.vehicleLPT.completed}
                     inProgress={0}
                     pending={equipmentProgress.vehicleLPT.pending}
+                    sectionKey="vehicleLPT"
+                    isSelected={equipmentSectionView === 'vehicleLPT'}
+                    onSectionClick={(section) => setEquipmentSectionView(equipmentSectionView === section ? 'none' : section)}
                   />
+                  {equipmentSectionView === 'vehicleLPT' && (
+                    <div className="mt-2 border-t border-gray-200 dark:border-neutral-700 pt-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
+                            Completed Items ({equipmentSectionItems.vehicleLPT.completed.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {equipmentSectionItems.vehicleLPT.completed.length > 0 ? (
+                              equipmentSectionItems.vehicleLPT.completed.map((item, index) => (
+                                <div key={`vehicleLPT-completed-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center">
+                                      <div className="h-2 w-2 rounded-full mr-2 bg-green-500" aria-hidden="true"></div>
+                                      <div className="text-sm font-medium">{item.name}</div>
+                                    </div>
+                                    {item.assignedTo && (
+                                      <div className="mt-1 ml-4 text-xs text-neutral-500 dark:text-neutral-400">
+                                        Assigned to: {item.assignedTo}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 dark:text-neutral-400">No completed items</div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
+                            Pending Items ({equipmentSectionItems.vehicleLPT.pending.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {equipmentSectionItems.vehicleLPT.pending.length > 0 ? (
+                              equipmentSectionItems.vehicleLPT.pending.map((item, index) => (
+                                <div key={`vehicleLPT-pending-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
+                                  <div className="flex items-center">
+                                    <div className="h-2 w-2 rounded-full mr-2 bg-red-500" aria-hidden="true"></div>
+                                    <div className="text-sm">{item.name}</div>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 dark:text-neutral-400">No pending items</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <ProgressSection
                     title="BWC"
                     total={equipmentProgress.bwc.total}
                     completed={equipmentProgress.bwc.completed}
                     inProgress={0}
                     pending={equipmentProgress.bwc.pending}
+                    sectionKey="bwc"
+                    isSelected={equipmentSectionView === 'bwc'}
+                    onSectionClick={(section) => setEquipmentSectionView(equipmentSectionView === section ? 'none' : section)}
                   />
+                  {equipmentSectionView === 'bwc' && (
+                    <div className="mt-2 border-t border-gray-200 dark:border-neutral-700 pt-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
+                            Completed Items ({equipmentSectionItems.bwc.completed.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {equipmentSectionItems.bwc.completed.length > 0 ? (
+                              equipmentSectionItems.bwc.completed.map((item, index) => (
+                                <div key={`bwc-completed-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center">
+                                      <div className="h-2 w-2 rounded-full mr-2 bg-green-500" aria-hidden="true"></div>
+                                      <div className="text-sm font-medium">{item.name}</div>
+                                    </div>
+                                    {item.assignedTo && (
+                                      <div className="mt-1 ml-4 text-xs text-neutral-500 dark:text-neutral-400">
+                                        Assigned to: {item.assignedTo} {item.role ? `(${item.role})` : ''}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 dark:text-neutral-400">No completed items</div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
+                            Pending Items ({equipmentSectionItems.bwc.pending.length})
+                          </h4>
+                          <div className="space-y-2">
+                            {equipmentSectionItems.bwc.pending.length > 0 ? (
+                              equipmentSectionItems.bwc.pending.map((item, index) => (
+                                <div key={`bwc-pending-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center">
+                                      <div className="h-2 w-2 rounded-full mr-2 bg-red-500" aria-hidden="true"></div>
+                                      <div className="text-sm font-medium">{item.name}</div>
+                                    </div>
+                                    {item.suggestedRole && (
+                                      <div className="mt-1 ml-4 text-xs text-neutral-500 dark:text-neutral-400">
+                                        {item.suggestedRole}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="text-sm text-gray-500 dark:text-neutral-400">No pending items</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -622,168 +1025,89 @@ export default function Dashboard() {
                   </div>
                   
                   <div className="grid grid-cols-2 gap-3 sm:gap-4 pt-2 sm:pt-4">
-                    <div className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-card dark:bg-neutral-700 p-2 sm:p-3">
+                    <div 
+                      className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-card dark:bg-neutral-700 p-2 sm:p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-600 transition-colors relative group"
+                      onClick={() => setPpeStatusView(ppeStatusView === 'completed' ? 'none' : 'completed')}
+                    >
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {ppeStatusView === 'completed' ? 
+                          <Minimize2 className="h-4 w-4 text-green-500" /> : 
+                          <Maximize2 className="h-4 w-4 text-green-500" />
+                        }
+                      </div>
                       <div className="text-2xl sm:text-3xl font-bold text-green-500 dark:text-green-400">{ppeProgress.completed}</div>
-                      <div className="text-xs text-muted-foreground dark:text-neutral-400">Completed</div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-muted-foreground dark:text-neutral-400">Completed</div>
+                        <ChevronDown className={`h-4 w-4 text-neutral-400 transition-transform ${ppeStatusView === 'completed' ? 'rotate-180' : ''}`} />
+                      </div>
                     </div>
-                    <div className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-card dark:bg-neutral-700 p-2 sm:p-3">
+                    <div 
+                      className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-card dark:bg-neutral-700 p-2 sm:p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-600 transition-colors relative group"
+                      onClick={() => setPpeStatusView(ppeStatusView === 'pending' ? 'none' : 'pending')}
+                    >
+                      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {ppeStatusView === 'pending' ? 
+                          <Minimize2 className="h-4 w-4 text-red-500" /> : 
+                          <Maximize2 className="h-4 w-4 text-red-500" />
+                        }
+                      </div>
                       <div className="text-2xl sm:text-3xl font-bold text-red-500 dark:text-red-400">{ppeProgress.pending}</div>
-                      <div className="text-xs text-muted-foreground dark:text-neutral-400">Pending</div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-muted-foreground dark:text-neutral-400">Pending</div>
+                        <ChevronDown className={`h-4 w-4 text-neutral-400 transition-transform ${ppeStatusView === 'pending' ? 'rotate-180' : ''}`} />
+                      </div>
                     </div>
                   </div>
+
+                  {/* Show personnel list based on selected view */}
+                  {ppeStatusView !== 'none' && (
+                    <div className="mt-4 border-t border-gray-200 dark:border-neutral-700 pt-4">
+                      <h3 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-3">
+                        {ppeStatusView === 'completed' ? 'Completed Personnel' : 'Pending Personnel'} ({ppeStatusView === 'completed' ? completedPersonnel.length : pendingItems.filter(item => item.type === 'ppe').length})
+                      </h3>
+                      <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
+                        {ppeStatusView === 'completed' ? (
+                          completedPersonnel.length > 0 ? (
+                            completedPersonnel.map((person, index) => (
+                              <div key={`completed-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700">
+                                <div className="flex items-center p-2">
+                                  <div className="h-2 w-2 rounded-full mr-3 bg-green-500" aria-hidden="true"></div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate dark:text-neutral-200">{person.name}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-center py-2 text-muted-foreground dark:text-neutral-400 col-span-2">
+                              No completed PPE checks found
+                            </div>
+                          )
+                        ) : (
+                          pendingItems.filter(item => item.type === 'ppe').length > 0 ? (
+                            pendingItems.filter(item => item.type === 'ppe').map((person, index) => (
+                              <div key={`pending-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700">
+                                <div className="flex items-center p-2">
+                                  <div className="h-2 w-2 rounded-full mr-3 bg-red-500" aria-hidden="true"></div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate dark:text-neutral-200">{person.name}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-center py-2 text-muted-foreground dark:text-neutral-400 col-span-2">
+                              No pending PPE checks found
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
-
-          {/* Pending Items Detail */}
-          <Card className="border-gray-200 dark:border-neutral-700 dark:bg-neutral-800">
-            <CardHeader className="flex flex-row items-center justify-between px-4 py-2.5 sm:px-6 sm:py-4 border-b border-gray-100 dark:border-neutral-700">
-              <div className="flex items-center">
-                <CardTitle className="text-base font-semibold dark:text-neutral-100">Pending Items Detail</CardTitle>
-              </div>
-              <div className="flex items-center">
-                <div className="flex bg-gray-100 dark:bg-neutral-900 rounded-md p-0.5">
-                  <Button 
-                    variant={pendingItemsFilter === 'all' ? 'default' : 'ghost'} 
-                    size="sm" 
-                    className={`h-7 text-xs px-2 rounded-sm ${
-                      pendingItemsFilter === 'all' 
-                        ? 'bg-black text-white dark:bg-black dark:text-white' 
-                        : 'text-gray-700 hover:text-gray-900 dark:text-neutral-300 dark:hover:text-neutral-100'
-                    }`}
-                    onClick={() => setPendingItemsFilter('all')}
-                  >
-                    All
-                  </Button>
-                  <Button 
-                    variant={pendingItemsFilter === 'equipment' ? 'default' : 'ghost'} 
-                    size="sm" 
-                    className={`h-7 text-xs px-2 rounded-sm ${
-                      pendingItemsFilter === 'equipment' 
-                        ? 'bg-black text-white dark:bg-black dark:text-white' 
-                        : 'text-gray-700 hover:text-gray-900 dark:text-neutral-300 dark:hover:text-neutral-100'
-                    }`}
-                    onClick={() => setPendingItemsFilter('equipment')}
-                  >
-                    Equipment
-                  </Button>
-                  <Button 
-                    variant={pendingItemsFilter === 'ppe' ? 'default' : 'ghost'} 
-                    size="sm" 
-                    className={`h-7 text-xs px-2 rounded-sm ${
-                      pendingItemsFilter === 'ppe' 
-                        ? 'bg-black text-white dark:bg-black dark:text-white' 
-                        : 'text-gray-700 hover:text-gray-900 dark:text-neutral-300 dark:hover:text-neutral-100'
-                    }`}
-                    onClick={() => setPendingItemsFilter('ppe')}
-                  >
-                    PPE
-                  </Button>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-6 w-6 p-0 rounded-full ml-1 sm:ml-2 dark:text-neutral-300 dark:hover:bg-neutral-700"
-                  onClick={() => setIsPendingItemsExpanded(!isPendingItemsExpanded)}
-                  aria-label={isPendingItemsExpanded ? "Minimize" : "Expand"}
-                >
-                  {isPendingItemsExpanded ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-minus">
-                      <path d="M5 12h14"/>
-                    </svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus">
-                      <path d="M5 12h14"/>
-                      <path d="M12 5v14"/>
-                    </svg>
-                  )}
-                </Button>
-              </div>
-            </CardHeader>
-            {isPendingItemsExpanded && (
-              <CardContent className="px-4 py-3 sm:px-6 sm:pb-6">
-                {pendingItems.length > 0 ? (
-                  <div>
-                    {/* Group items by section */}
-                    {(() => {
-                      // Create a map of sections to items
-                      const sectionMap = new Map<string, PendingItemProps[]>();
-                      
-                      // Filter items based on the selected filter
-                      const filteredItems = pendingItems.filter(item => {
-                        if (pendingItemsFilter === 'all') return true;
-                        return item.type === pendingItemsFilter;
-                      });
-                      
-                      // Group equipment items by section
-                      filteredItems
-                        .filter(item => item.type === 'equipment')
-                        .forEach(item => {
-                          const section = item.section || 'Other';
-                          // Skip BWC items
-                          if (section === 'BWC') return;
-                          if (!sectionMap.has(section)) {
-                            sectionMap.set(section, []);
-                          }
-                          sectionMap.get(section)!.push(item);
-                        });
-                      
-                      // Add PPE items as their own section
-                      const ppeItems = filteredItems.filter(item => item.type === 'ppe');
-                      if (ppeItems.length > 0) {
-                        sectionMap.set('PPE Checks', ppeItems);
-                      }
-                      
-                      // Sort sections: Equipment sections first, then PPE
-                      const sortedSections = Array.from(sectionMap.keys()).sort((a, b) => {
-                        if (a === 'PPE Checks') return 1;
-                        if (b === 'PPE Checks') return -1;
-                        return a.localeCompare(b);
-                      });
-                      
-                      // If no items match the filter, show a message
-                      if (sortedSections.length === 0) {
-                        return (
-                          <div className="text-center py-4 sm:py-6 text-muted-foreground dark:text-neutral-400">
-                            No {pendingItemsFilter === 'all' ? '' : pendingItemsFilter} pending items found
-                          </div>
-                        );
-                      }
-                      
-                      return (
-                        <div className="space-y-3 sm:space-y-4">
-                          {sortedSections.map(section => (
-                            <div key={section} className="space-y-1">
-                              <h3 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2 border-b border-gray-200 dark:border-neutral-700 pb-1">
-                                {section} ({sectionMap.get(section)!.length})
-                              </h3>
-                              <div className="grid gap-1 grid-cols-1 sm:grid-cols-2">
-                                {sectionMap.get(section)!.map((item, index) => (
-                                  <div key={`${section}-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700">
-                                    <div className="flex items-center p-2">
-                                      <div className={`h-2 w-2 rounded-full mr-3 ${item.type === 'equipment' ? 'bg-amber-500' : 'bg-blue-500'}`} aria-hidden="true"></div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate dark:text-neutral-200">{item.name}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div className="text-center py-4 sm:py-6 text-muted-foreground dark:text-neutral-400">
-                    No pending items found
-                  </div>
-                )}
-              </CardContent>
-            )}
-          </Card>
 
           {/* Recent Activity */}
           <Card className="border-gray-200 dark:border-neutral-700 dark:bg-neutral-800">
@@ -898,17 +1222,45 @@ interface ProgressSectionProps {
   completed: number;
   inProgress: number;
   pending: number;
+  sectionKey?: 'armoury' | 'vehicleFPT' | 'vehicleLPT' | 'bwc';
+  isSelected?: boolean;
+  onSectionClick?: (section: 'armoury' | 'vehicleFPT' | 'vehicleLPT' | 'bwc') => void;
 }
 
-const ProgressSection = ({ title, total, completed, inProgress, pending }: ProgressSectionProps) => {
+const ProgressSection = ({ 
+  title, 
+  total, 
+  completed, 
+  inProgress, 
+  pending, 
+  sectionKey,
+  isSelected,
+  onSectionClick 
+}: ProgressSectionProps) => {
   const completedPercent = (completed / total) * 100;
   // We're not using inProgressPercent anymore
   const pendingPercent = (pending / total) * 100;
 
   return (
-    <div className="space-y-1 sm:space-y-2">
+    <div 
+      className={`space-y-1 sm:space-y-2 ${sectionKey ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-800 p-2 rounded-md -mx-2 transition-colors relative group' : ''}`}
+      onClick={() => sectionKey && onSectionClick && onSectionClick(sectionKey)}
+    >
+      {sectionKey && (
+        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          {isSelected ? 
+            <Minimize2 className="h-4 w-4 text-neutral-500" /> : 
+            <Maximize2 className="h-4 w-4 text-neutral-500" />
+          }
+        </div>
+      )}
       <div className="flex justify-between text-sm dark:text-neutral-300">
-        <span>{title}</span>
+        <div className="flex items-center">
+          <span>{title}</span>
+          {sectionKey && (
+            <ChevronDown className={`h-4 w-4 ml-1 text-neutral-400 transition-transform ${isSelected ? 'rotate-180' : ''}`} />
+          )}
+        </div>
         <span className="font-medium">{completed}/{total} completed</span>
       </div>
       <div className="h-2 rounded-full bg-gray-100 dark:bg-neutral-700 overflow-hidden flex">

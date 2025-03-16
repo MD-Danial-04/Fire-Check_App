@@ -13,33 +13,47 @@ import {
   Menu,
   X,
   Sun,
-  Moon
+  Moon,
+  Home,
+  Shield,
+  Truck,
+  Smartphone
 } from 'lucide-react'
 import { ThemeToggle } from '@/app/components/ui/theme-toggle'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { useTheme } from '@/app/providers/theme-provider'
 
-const navigation = [
+const routes = [
   {
     name: 'Dashboard',
+    icon: LayoutDashboard,
     href: '/',
-    icon: LayoutDashboard
+    color: 'text-sky-500',
   },
   {
     name: 'BA Master List',
+    icon: Database,
     href: '/ba-master-list',
-    icon: Database
+    color: 'text-blue-700',
   },
   {
     name: 'Manning List',
+    icon: Users,
     href: '/manning-list',
-    icon: Users
+    color: 'text-violet-500',
   },
   {
     name: 'PPE Check',
+    icon: Shield,
     href: '/ppe-check',
-    icon: HardHat
+    color: 'text-pink-700',
+  },
+  {
+    name: 'Equipment Checklist',
+    icon: FileCheck,
+    href: '/equipment-checklist',
+    color: 'text-orange-700',
   }
 ]
 
@@ -124,20 +138,29 @@ export function Sidebar() {
         </div>
         
         <nav className="mt-6 space-y-1 flex-1 overflow-y-auto">
-          {navigation.map((item) => {
+          {routes.map((item) => {
             const Icon = item.icon
             return (
               <Link
                 key={item.name}
                 href={item.href}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors',
                   pathname === item.href
-                    ? 'bg-neutral-100 text-neutral-900 font-medium dark:bg-neutral-800 dark:text-white'
-                    : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800 dark:hover:text-white'
+                    ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100'
+                    : 'text-neutral-700 dark:text-neutral-400 hover:bg-neutral-50 dark:hover:bg-neutral-800 hover:text-neutral-900 dark:hover:text-neutral-100',
+                  'group flex items-center px-3 py-2 text-sm font-medium rounded-md'
                 )}
+                aria-current={pathname === item.href ? 'page' : undefined}
               >
-                <Icon className="h-4 w-4" />
+                <Icon
+                  className={cn(
+                    pathname === item.href
+                      ? item.color || 'text-neutral-500'
+                      : 'text-neutral-400 group-hover:text-neutral-500 dark:text-neutral-500 dark:group-hover:text-neutral-400',
+                    'mr-3 flex-shrink-0 h-5 w-5'
+                  )}
+                  aria-hidden="true"
+                />
                 {item.name}
               </Link>
             )

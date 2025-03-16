@@ -12,7 +12,10 @@ import {
   Menu,
   X,
   Sun,
-  Moon
+  Moon,
+  Home,
+  Shield,
+  FileCheck
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/app/components/ui/theme-toggle'
@@ -38,7 +41,12 @@ const navigation = [
   {
     name: 'PPE Check',
     href: '/ppe-check',
-    icon: HardHat
+    icon: Shield
+  },
+  {
+    name: 'Equipment Checklist',
+    href: '/equipment-checklist',
+    icon: FileCheck
   }
 ]
 

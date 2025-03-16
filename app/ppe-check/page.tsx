@@ -863,14 +863,7 @@ function PPECheckClient() {
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link href="/equipment-checklist" passHref>
-              <Button variant="outline" className="hidden sm:flex items-center gap-2">
-                <Clipboard className="h-4 w-4" />
-                Equipment Checklist
-              </Button>
-            </Link>
-          </div>
+          <div className="flex-1"></div>
           <div className="relative w-full sm:w-64 md:w-80">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
             <Input 
@@ -882,16 +875,6 @@ function PPECheckClient() {
               aria-label="Search personnel or equipment"
             />
           </div>
-        </div>
-
-        {/* Mobile Equipment Checklist Button */}
-        <div className="sm:hidden">
-          <Link href="/equipment-checklist" passHref>
-            <Button variant="outline" className="w-full flex items-center justify-center gap-2">
-              <Clipboard className="h-4 w-4" />
-              Equipment Checklist
-            </Button>
-          </Link>
         </div>
 
         {/* Bookmarklet Instructions */}
