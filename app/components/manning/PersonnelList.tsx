@@ -49,32 +49,34 @@ const PersonnelList = ({ personnel }: PersonnelListProps) => {
   return (
     <div className="space-y-6">
       {sortedGroups.map(([group, members]) => (
-        <Card key={group} className="overflow-hidden">
-          <div className="bg-gray-200 dark:bg-[#2E2521] px-4 py-2">
-            <h3 className="font-semibold text-gray-900 dark:text-[#FCF6EC]">{group}</h3>
+        <Card key={group} className="overflow-hidden bg-[#2a2522] border-[#3a3532]">
+          <div className="bg-[#3a3532] dark:bg-[#3a3532] px-4 py-3">
+            <h3 className="font-semibold text-white dark:text-white">{group}</h3>
           </div>
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-100 dark:bg-[#1C1917]">
-                <TableHead className="w-[80px] text-gray-900 dark:text-[#FCF6EC]">S/N</TableHead>
-                <TableHead className="w-[200px] text-gray-900 dark:text-[#FCF6EC]">Rank</TableHead>
-                <TableHead className="text-gray-900 dark:text-[#FCF6EC]">Name</TableHead>
-                <TableHead className="w-[200px] text-gray-900 dark:text-[#FCF6EC]">Role</TableHead>
-                <TableHead className="w-[120px] text-right text-gray-900 dark:text-[#FCF6EC]">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {members.map((person) => (
-                <TableRow key={person.serial_no}>
-                  <TableCell className="font-medium">{person.serial_no}</TableCell>
-                  <TableCell>{person.rank}</TableCell>
-                  <TableCell>{person.name}</TableCell>
-                  <TableCell>{person.role}</TableCell>
-                  <TableCell className="text-right">{person.status || '-'}</TableCell>
+          <div className="overflow-x-auto">
+            <Table className="w-full table-fixed">
+              <TableHeader>
+                <TableRow className="bg-[#2a2522] dark:bg-[#2a2522] border-b border-[#3a3532]">
+                  <TableHead className="w-[80px] md:w-[120px] text-white py-3 pl-4 font-medium">Rank</TableHead>
+                  <TableHead className="text-white py-3 font-medium">Name</TableHead>
+                  <TableHead className="w-[100px] text-white py-3 pr-4 text-right font-medium">Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {members.map((person) => (
+                  <TableRow key={person.serial_no} className="border-b border-[#3a3532] last:border-0">
+                    <TableCell className="py-3 pl-4 text-white w-[80px] md:w-[120px]">{person.rank}</TableCell>
+                    <TableCell className="py-3 text-white">{person.name}</TableCell>
+                    <TableCell className="py-3 pr-4 text-white text-right w-[100px]">
+                      <span className="whitespace-nowrap">
+                        {person.status || '-'}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
       ))}
     </div>

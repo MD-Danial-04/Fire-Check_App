@@ -20,7 +20,12 @@ export async function POST(request: Request) {
       params.append(FIELD_IDS.name, data.name);
     }
 
-    // Add vessel BA set if available, or N.A if person has vehicle but no BA
+    // Check if only LFAV BA set is assigned (no vessel BA)
+    const hasVesselBA = !!(data.baSets?.vessel || data.baSets?.vesselType);
+    const hasLfavBA = !!(data.baSets?.lf || data.baSets?.lfType);
+    const onlyLfavAssigned = !hasVesselBA && hasLfavBA;
+
+    // Add vessel BA set if available, or use LFAV data if only LFAV is assigned
     if (data.baSets?.vessel) {
       const vesselSet = `${data.baSets.vessel.appliance} / ${data.baSets.vessel.backplate} / ${data.baSets.vessel.cylinder}`;
       params.append(FIELD_IDS.vessel, vesselSet);
@@ -28,13 +33,23 @@ export async function POST(request: Request) {
       // Person has vehicle assignment but no BA set
       const vesselSet = `${data.baSets.vesselType} / N.A / N.A`;
       params.append(FIELD_IDS.vessel, vesselSet);
+    } else if (onlyLfavAssigned) {
+      // Special case: Only LFAV BA set is assigned, put it in the vessel field
+      if (data.baSets?.lf) {
+        const lfSet = `${data.baSets.lf.appliance} / ${data.baSets.lf.backplate} / ${data.baSets.lf.cylinder}`;
+        params.append(FIELD_IDS.vessel, lfSet);
+      } else if (data.baSets?.lfType) {
+        const lfSet = `${data.baSets.lfType} / N.A / N.A`;
+        params.append(FIELD_IDS.vessel, lfSet);
+      }
     }
 
-    // Add LFAV BA set if available, or N.A if person has LFAV but no BA
-    if (data.baSets?.lf) {
+    // Add LFAV BA set if available AND there's already a vessel BA set
+    // If only LFAV is assigned, we've already put it in the vessel field above
+    if (!onlyLfavAssigned && data.baSets?.lf) {
       const lfSet = `${data.baSets.lf.appliance} / ${data.baSets.lf.backplate} / ${data.baSets.lf.cylinder}`;
       params.append(FIELD_IDS.lfav, lfSet);
-    } else if (data.baSets?.lfType) {
+    } else if (!onlyLfavAssigned && data.baSets?.lfType) {
       // Person has LFAV assignment but no BA set
       const lfSet = `${data.baSets.lfType} / N.A / N.A`;
       params.append(FIELD_IDS.lfav, lfSet);

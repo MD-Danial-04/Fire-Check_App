@@ -480,15 +480,15 @@ export default function Dashboard() {
           });
           
         // Add pending BWC items (show all unchecked BWCs)
-        sections.bwc
-          .filter(item => !item.checked)
-          .forEach(item => {
-            pendingEquipment.push({
-              name: item.name,
-              section: 'BWC',
-              type: 'equipment'
+          sections.bwc
+            .filter(item => !item.checked)
+            .forEach(item => {
+              pendingEquipment.push({
+                name: item.name,
+                section: 'BWC',
+                type: 'equipment'
+              });
             });
-          });
 
         // Update pending items state with equipment pending items
         setPendingItems(prevItems => {
@@ -1037,9 +1037,9 @@ export default function Dashboard() {
                       </div>
                       <div className="text-2xl sm:text-3xl font-bold text-green-500 dark:text-green-400">{ppeProgress.completed}</div>
                       <div className="flex items-center justify-between">
-                        <div className="text-xs text-muted-foreground dark:text-neutral-400">Completed</div>
+                      <div className="text-xs text-muted-foreground dark:text-neutral-400">Completed</div>
                         <ChevronDown className={`h-4 w-4 text-neutral-400 transition-transform ${ppeStatusView === 'completed' ? 'rotate-180' : ''}`} />
-                      </div>
+                    </div>
                     </div>
                     <div 
                       className="rounded-lg border border-gray-200 dark:border-neutral-700 bg-card dark:bg-neutral-700 p-2 sm:p-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-neutral-600 transition-colors relative group"
@@ -1053,35 +1053,35 @@ export default function Dashboard() {
                       </div>
                       <div className="text-2xl sm:text-3xl font-bold text-red-500 dark:text-red-400">{ppeProgress.pending}</div>
                       <div className="flex items-center justify-between">
-                        <div className="text-xs text-muted-foreground dark:text-neutral-400">Pending</div>
+                      <div className="text-xs text-muted-foreground dark:text-neutral-400">Pending</div>
                         <ChevronDown className={`h-4 w-4 text-neutral-400 transition-transform ${ppeStatusView === 'pending' ? 'rotate-180' : ''}`} />
-                      </div>
                     </div>
                   </div>
+          </div>
 
                   {/* Show personnel list based on selected view */}
                   {ppeStatusView !== 'none' && (
                     <div className="mt-4 border-t border-gray-200 dark:border-neutral-700 pt-4">
                       <h3 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-3">
                         {ppeStatusView === 'completed' ? 'Completed Personnel' : 'Pending Personnel'} ({ppeStatusView === 'completed' ? completedPersonnel.length : pendingItems.filter(item => item.type === 'ppe').length})
-                      </h3>
+                              </h3>
                       <div className="grid gap-2 grid-cols-1 sm:grid-cols-2">
                         {ppeStatusView === 'completed' ? (
                           completedPersonnel.length > 0 ? (
                             completedPersonnel.map((person, index) => (
                               <div key={`completed-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700">
-                                <div className="flex items-center p-2">
+                                    <div className="flex items-center p-2">
                                   <div className="h-2 w-2 rounded-full mr-3 bg-green-500" aria-hidden="true"></div>
-                                  <div className="flex-1 min-w-0">
+                                      <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate dark:text-neutral-200">{person.name}</p>
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              </div>
                             ))
                           ) : (
                             <div className="text-center py-2 text-muted-foreground dark:text-neutral-400 col-span-2">
                               No completed PPE checks found
-                            </div>
+                              </div>
                           )
                         ) : (
                           pendingItems.filter(item => item.type === 'ppe').length > 0 ? (
@@ -1091,22 +1091,22 @@ export default function Dashboard() {
                                   <div className="h-2 w-2 rounded-full mr-3 bg-red-500" aria-hidden="true"></div>
                                   <div className="flex-1 min-w-0">
                                     <p className="text-sm font-medium truncate dark:text-neutral-200">{person.name}</p>
-                                  </div>
-                                </div>
-                              </div>
+                            </div>
+                        </div>
+                  </div>
                             ))
-                          ) : (
+                ) : (
                             <div className="text-center py-2 text-muted-foreground dark:text-neutral-400 col-span-2">
                               No pending PPE checks found
-                            </div>
+                  </div>
                           )
-                        )}
+                )}
                       </div>
                     </div>
-                  )}
+            )}
                 </div>
               </CardContent>
-            </Card>
+          </Card>
           </div>
 
           {/* Recent Activity */}
@@ -1256,7 +1256,7 @@ const ProgressSection = ({
       )}
       <div className="flex justify-between text-sm dark:text-neutral-300">
         <div className="flex items-center">
-          <span>{title}</span>
+        <span>{title}</span>
           {sectionKey && (
             <ChevronDown className={`h-4 w-4 ml-1 text-neutral-400 transition-transform ${isSelected ? 'rotate-180' : ''}`} />
           )}

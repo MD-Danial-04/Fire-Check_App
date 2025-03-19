@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import Link from 'next/link'
-import { ArrowLeft, X, ExternalLink, Trash2, RefreshCw, Pencil } from 'lucide-react'
+import { ArrowLeft, X, Trash2, RefreshCw, Pencil, ExternalLink } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -102,6 +102,9 @@ export default function EquipmentChecklistPage() {
 
   // Add a ref to track the last state updates
   const lastStateUpdates = useRef<Record<string, string>>({});
+
+  // Add a state for reset vehicles dialog
+  const [isResetVehiclesDialogOpen, setIsResetVehiclesDialogOpen] = useState(false);
 
   // Fetch personnel data from Supabase
   useEffect(() => {
@@ -1224,6 +1227,106 @@ export default function EquipmentChecklistPage() {
     }
   };
 
+  // Add a function to reset vehicle entries to default values
+  const handleResetVehicles = async () => {
+    try {
+      setIsSaving(true);
+      setSaveError(null);
+      setIsResetVehiclesDialogOpen(false);
+
+      // Default vehicle data for FPT section
+      const defaultVehiclesFPT = [
+        { id: 1, name: "CFS FRC (QX1859E)" },
+        { id: 2, name: "Class 4 Truck (YN4304C)" },
+        { id: 3, name: "LF811 (GDB7755P)" },
+        { id: 4, name: "LF812 (GBD6351C)" },
+        { id: 5, name: "Admin FRC (QX1034T)" },
+        { id: 6, name: "Spare LF (GBF8661J)" }
+      ];
+
+      // Default vehicle data for LPT section
+      const defaultVehiclesLPT = [
+        { id: 1, name: "CFS FRC (QX1859E)" },
+        { id: 2, name: "Class 4 Truck (YN4304C)" },
+        { id: 3, name: "LF811 (GBF8661J)" },
+        { id: 4, name: "LF812 (GBD6351C)" },
+        { id: 5, name: "Admin FRC (QX1034T)" },
+        { id: 6, name: "Spare LF (GBD7755P)" }
+      ];
+
+      // Fetch current data to preserve other fields
+      const { data: currentData, error: fetchError } = await supabase
+        .from('equipment_checklist')
+        .select('*')
+        .or('section.eq.VEHICLE FPT,section.eq.VEHICLE LPT');
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      // Update FPT vehicles
+      for (const vehicle of defaultVehiclesFPT) {
+        // Find current item data to preserve other fields
+        const currentItem = currentData?.find(
+          item => item.section === 'VEHICLE FPT' && item.item_id === vehicle.id
+        );
+
+        // Only update the name field, keep all other fields intact
+        if (currentItem) {
+          await supabase
+            .from('equipment_checklist')
+            .update({ 
+              name: vehicle.name,
+              // Explicitly set the updated_at field
+              updated_at: new Date().toISOString()
+            })
+            .eq('section', 'VEHICLE FPT')
+            .eq('item_id', vehicle.id);
+        }
+      }
+
+      // Update LPT vehicles
+      for (const vehicle of defaultVehiclesLPT) {
+        // Find current item data to preserve other fields
+        const currentItem = currentData?.find(
+          item => item.section === 'VEHICLE LPT' && item.item_id === vehicle.id
+        );
+
+        // Only update the name field, keep all other fields intact
+        if (currentItem) {
+          await supabase
+            .from('equipment_checklist')
+            .update({ 
+              name: vehicle.name,
+              // Explicitly set the updated_at field
+              updated_at: new Date().toISOString()
+            })
+            .eq('section', 'VEHICLE LPT')
+            .eq('item_id', vehicle.id);
+        }
+      }
+
+      // Refresh data
+      await fetchEquipmentData();
+
+      toast({
+        title: "Success",
+        description: "Vehicle entries have been reset to their default values. Existing assignments and status information has been preserved.",
+      });
+    } catch (error) {
+      console.error('Error resetting vehicle entries:', error);
+      setSaveError('An unexpected error occurred while resetting vehicles');
+      
+      toast({
+        title: "Error",
+        description: "Failed to reset vehicle entries. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleReset = async () => {
     try {
       setIsSaving(true);
@@ -1306,22 +1409,32 @@ export default function EquipmentChecklistPage() {
         }
         
         const updates: VehicleUpdate[] = [];
-        const originalName = item.name.split(' (')[0];
         
-        sections.forEach((searchSection, searchSectionIndex) => {
-          if (searchSection.title === "VEHICLE FPT" || searchSection.title === "VEHICLE LPT") {
-            searchSection.items.forEach((searchItem, searchItemIndex) => {
-              const searchItemName = searchItem.name.split(' (')[0];
-              if (searchItemName === originalName) {
-                updates.push({
-                  section: searchSection.title,
-                  item_id: searchItem.id,
-                  name: newName
-                });
-              }
+        // Get the current item's ID
+        const currentItemId = item.id;
+        
+        // Find ONLY the corresponding entry in the other section with the same item_id
+        const otherSectionTitle = section.title === "VEHICLE FPT" ? "VEHICLE LPT" : "VEHICLE FPT";
+        const otherSection = sections.find(s => s.title === otherSectionTitle);
+        
+        // Add the current item to updates
+        updates.push({
+          section: section.title,
+          item_id: currentItemId,
+          name: newName
+        });
+        
+        // If we found a corresponding entry in the other section with the same item_id, add it too
+        if (otherSection) {
+          const correspondingItem = otherSection.items.find(i => i.id === currentItemId);
+          if (correspondingItem) {
+            updates.push({
+              section: otherSectionTitle,
+              item_id: currentItemId,
+              name: newName
             });
           }
-        });
+        }
 
         // Update all matching entries
         for (const update of updates) {
@@ -1339,14 +1452,13 @@ export default function EquipmentChecklistPage() {
 
         // Update local state
         const newSections = [...sections];
-        sections.forEach((searchSection, searchSectionIndex) => {
-          if (searchSection.title === "VEHICLE FPT" || searchSection.title === "VEHICLE LPT") {
-            searchSection.items.forEach((searchItem, searchItemIndex) => {
-              const searchItemName = searchItem.name.split(' (')[0];
-              if (searchItemName === originalName) {
-                newSections[searchSectionIndex].items[searchItemIndex].name = newName;
-              }
-            });
+        updates.forEach(update => {
+          const sectionIndex = newSections.findIndex(s => s.title === update.section);
+          if (sectionIndex !== -1) {
+            const itemIndex = newSections[sectionIndex].items.findIndex(i => i.id === update.item_id);
+            if (itemIndex !== -1) {
+              newSections[sectionIndex].items[itemIndex].name = update.name;
+            }
           }
         });
         setSections(newSections);
@@ -1452,24 +1564,32 @@ export default function EquipmentChecklistPage() {
     <div className="container mx-auto py-3 sm:py-6 px-3 sm:px-6">
       {/* Remove inline debug logging */}
       <div className="space-y-4 sm:space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
-          <div className="flex flex-row items-center gap-2 sm:gap-3">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Equipment Checklist</h1>
-          </div>
+        <div className="flex flex-col space-y-4 sm:space-y-6 relative">
+          <header className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Link href="/" className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-8 sm:h-10 px-2 sm:px-4 py-0">
+                <ArrowLeft className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Back to Dashboard</span>
+              </Link>
+              <h1 className="text-lg sm:text-xl font-semibold">Equipment Checklist</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRefresh}
+                className="h-8 sm:h-10 px-2 sm:px-4 flex items-center gap-1"
+                disabled={isSaving || isLoading}
+                aria-label="Refresh"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span className="hidden sm:inline">Refresh</span>
+              </Button>
+            </div>
+          </header>
           
           {/* Status indicator */}
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={isLoading || isSaving}
-              className="h-8 sm:h-9 px-2 sm:px-3 text-xs sm:text-sm flex items-center gap-1 sm:gap-2"
-              aria-label="Refresh data"
-            >
-              <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              <span className="hidden sm:inline">Refresh</span>
-            </Button>
             {isLoading && (
               <div className="text-xs sm:text-sm text-muted-foreground flex items-center">
                 <span className="inline-block h-2 w-2 rounded-full bg-blue-500 mr-2 animate-pulse"></span>
@@ -2110,18 +2230,53 @@ export default function EquipmentChecklistPage() {
             </Card>
           ))}
         </div>
-        <div className="flex justify-end mt-4 sm:mt-6">
+        <div className="flex flex-col md:flex-row gap-4 px-4 pb-4 pt-0 md:px-0">
           <Button
-            variant="destructive"
-            size="default"
-            onClick={() => setIsResetDialogOpen(true)}
-            className="flex items-center gap-1.5 sm:gap-2 h-9 sm:h-10 text-sm"
-            disabled={isSaving || isLoading}
+            onClick={handleResetVehicles}
+            variant="outline"
+            className="flex items-center justify-center md:justify-start w-full md:w-auto rounded-lg bg-white/50 dark:bg-transparent dark:hover:bg-neutral-800/50 backdrop-blur-sm border-neutral-200 dark:border-neutral-700"
           >
-            <Trash2 className="h-4 w-4" />
-            Reset All Equipment
+            <span className="mr-2 text-neutral-600 dark:text-neutral-400 font-medium">Reset Vehicles</span>
+          </Button>
+          <Button
+            onClick={handleReset}
+            variant="outline"
+            className="flex items-center justify-center md:justify-start w-full md:w-auto rounded-lg bg-white/50 dark:bg-transparent dark:hover:bg-neutral-800/50 backdrop-blur-sm border-neutral-200 dark:border-neutral-700 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+          >
+            <span className="mr-2 text-red-600 dark:text-red-400 font-medium">Reset All Equipment</span>
           </Button>
         </div>
+
+        {/* Reset Vehicles Confirmation Dialog */}
+        <Dialog open={isResetVehiclesDialogOpen} onOpenChange={setIsResetVehiclesDialogOpen}>
+          <DialogContent className="max-w-[90%] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Reset Vehicle Entries</DialogTitle>
+              <DialogDescription>
+                This will reset all vehicle names and plate numbers to their default values.
+                This is useful if vehicle entries have become inconsistent or mixed up.
+                Existing check statuses and assignments will be preserved.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-3 mt-4">
+              <Button
+                variant="outline"
+                onClick={() => setIsResetVehiclesDialogOpen(false)}
+                className="h-9 text-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="default"
+                onClick={handleResetVehicles}
+                className="h-9 text-sm"
+                disabled={isSaving}
+              >
+                {isSaving ? "Resetting..." : "Reset Vehicles"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Reset Confirmation Dialog */}
         <Dialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>

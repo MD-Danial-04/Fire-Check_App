@@ -1,9 +1,8 @@
 'use client'
 
-import { createBrowserClient } from '@supabase/ssr'
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useCallback, useRef } from 'react'
 import React from 'react'
-import { Search, ExternalLink, Copy, Plus, Clipboard, FileCheck, Smartphone, Bookmark } from 'lucide-react'
+import { Search, ExternalLink, Copy, Plus, Clipboard, FileCheck, Smartphone, Bookmark, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -20,12 +19,12 @@ import { useToast } from "@/components/ui/use-toast";
 import { ResponsiveTable } from "@/components/ui/responsive-table"
 import { DialogFooter } from "@/components/ui/dialog"
 import Link from 'next/link'
-import { createClient } from '@supabase/supabase-js';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { cn } from "@/lib/utils"
 import BookmarkletInstructions from '@/components/BookmarkLetInstructions';
 import { useSearchParams } from 'next/navigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { getSupabaseClient, cleanupAllChannels, retryWithExponentialBackoff, trackChannel, untrackChannel, resetSupabaseClient } from '@/lib/supabase-client';
 
 interface Personnel {
   id: string;
@@ -48,10 +47,12 @@ interface GroupedPersonnel {
 
 // Create a client component that uses useSearchParams
 function PPECheckClient() {
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
+  // Use the singleton Supabase client
+  const supabase = getSupabaseClient();
+  
+  // Add state for reconnection
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [connectionFailed, setConnectionFailed] = useState(false);
   
   // Immediate check for Supabase client and form_responses table
   console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -76,6 +77,12 @@ function PPECheckClient() {
   const [showPersonSelectionDialog, setShowPersonSelectionDialog] = useState(false);
   const [showResetConfirmation, setShowResetConfirmation] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const [isBookmarkletCollapsed, setIsBookmarkletCollapsed] = useState(false);
 
   // Define the exact grouping order
   const groupingOrder = ["REGULARS", "NS SECTION COMMANDER", "NS MARINE FIREFIGHTER", "ORNS/VES"];
@@ -96,6 +103,54 @@ function PPECheckClient() {
     return () => window.removeEventListener('resize', checkIfMobile);
   }, []);
 
+  // Add scroll listener for floating search button
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 100);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
+
+  // Handle search input focus
+  const handleSearchFocus = () => {
+    setIsSearchActive(true);
+    // Auto-collapse bookmarklet when searching
+    setIsBookmarkletCollapsed(true);
+    
+    if (isMobile) {
+      // On mobile, scroll the element into view when focused
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 300); // Delayed to allow keyboard to appear
+    }
+  };
+
+  // Handle search input blur
+  const handleSearchBlur = () => {
+    // Only set search as inactive if the field is empty
+    if (searchTerm === '') {
+      setIsSearchActive(false);
+    }
+  };
+
+  // Close search on mobile
+  const handleCloseSearch = () => {
+    setSearchTerm('');
+    setIsSearchActive(false);
+    setIsBookmarkletCollapsed(false);
+  };
+
+  // Toggle bookmarklet collapse
+  const toggleBookmarklet = () => {
+    setIsBookmarkletCollapsed(!isBookmarkletCollapsed);
+  };
+
   // Add rank order function
   const getRankOrder = (name: string) => {
     const rank = name.split(' ')[0].toUpperCase();
@@ -115,6 +170,8 @@ function PPECheckClient() {
 
   // Function to fetch submitted responses
   const fetchSubmittedResponses = async () => {
+    if (!supabase) return;
+    
     try {
       console.log('Fetching submitted responses...');
       const { data, error } = await supabase
@@ -132,7 +189,7 @@ function PPECheckClient() {
       
       // Create a map of personnel name to their most recent response ID
       const responseMap: Record<string, string> = {};
-      data?.forEach(item => {
+      data?.forEach((item: { personnel_name: string; response_id: string }) => {
         // Only store the first (most recent) response for each person
         if (!responseMap[item.personnel_name]) {
           responseMap[item.personnel_name] = item.response_id;
@@ -146,199 +203,256 @@ function PPECheckClient() {
     }
   };
 
+  // Add a manual reconnect function
+  const handleManualReconnect = useCallback(() => {
+    if (isReconnecting) return;
+    
+    setIsReconnecting(true);
+    
+    // Force cleanup of any existing subscriptions
+    if (supabase) {
+      // Get all channels and remove them
+      const channels = supabase.getChannels();
+      Promise.all(
+        channels.map((channel: RealtimeChannel) => 
+          supabase.removeChannel(channel).catch((err: Error) => 
+            console.warn('Error removing channel during reconnect:', err)
+          )
+        )
+      ).then(() => {
+        console.log('All existing channels removed');
+        
+        // Wait a bit before reconnecting
+        setTimeout(() => {
+          // Clear the instance so a new one is created
+          resetSupabaseClient();
+          
+          // Update the component state
+          setIsReconnecting(false);
+          setConnectionFailed(false);
+          
+          // Force re-render to create a new client
+          window.location.reload();
+        }, 1000);
+      });
+    } else {
+      // No supabase instance, just reload the page
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+    }
+  }, [supabase, isReconnecting]);
+
+  // Update the useEffect for realtime subscriptions
   useEffect(() => {
     let mounted = true;
-    let channel: RealtimeChannel | null = null;
-    let retryTimeout: NodeJS.Timeout;
+    let realtimeChannel: RealtimeChannel | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
     let retryCount = 0;
     const maxRetries = 5;
     
-    console.log('Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-    console.log('Supabase client initialized:', !!supabase);
+    console.log('Setting up main data subscription...');
     
-    // Check if form_responses table exists
-    async function checkFormResponsesTable() {
-      try {
-        console.log('Checking form_responses table...');
-        const { data, error } = await supabase
-          .from('form_responses')
-          .select('response_id')
-          .limit(1);
-          
-        console.log('Form responses table check:', { data, error });
-        
-        if (error) {
-          console.error('Error accessing form_responses table:', error);
-          if (error.code === '42P01') {
-            console.error('The form_responses table does not exist. Please run the migration.');
-          }
-        } else {
-          console.log('Form responses table exists and is accessible');
-        }
-      } catch (error) {
-        console.error('Error checking form_responses table:', error);
-      }
+    if (!supabase) {
+      console.error('Supabase client not initialized');
+      setConnectionFailed(true);
+      return;
     }
-    
-    checkFormResponsesTable();
-    
+
     async function fetchData() {
-      if (!mounted) return;
+      if (!mounted || !supabase) return;
       
       try {
-        setIsLoading(true);
-        
-        // Fetch BA data from personnel_ba_view
-        const { data: baData, error: baError } = await supabase
-          .from('personnel_ba_view')
-          .select('*');
+        await retryWithExponentialBackoff(async () => {
+          setIsLoading(true);
           
-        if (baError) throw baError;
-        
-        // Fetch personnel groupings
-        const { data: personnelData, error: personnelError } = await supabase
-        .from('personnel')
-          .select('name, grouping');
+          // Fetch BA data from personnel_ba_view
+          const { data: baData, error: baError } = await supabase
+            .from('personnel_ba_view')
+            .select('*');
           
-        if (personnelError) throw personnelError;
-        
-        // Create a map of name to grouping
-        const groupingMap = new Map<string, string>();
-        personnelData.forEach(p => {
-          if (p.name && p.grouping) {
-            groupingMap.set(p.name.toLowerCase(), p.grouping);
-          }
+          if (baError) throw baError;
+          
+          // Fetch personnel groupings
+          const { data: personnelData, error: personnelError } = await supabase
+            .from('personnel')
+            .select('name, grouping');
+          
+          if (personnelError) throw personnelError;
+          
+          // Create a map of name to grouping
+          const groupingMap = new Map<string, string>();
+          personnelData.forEach((p: { name: string; grouping: string }) => {
+            if (p.name && p.grouping) {
+              groupingMap.set(p.name.toLowerCase(), p.grouping);
+            }
+          });
+          
+          // Process BA data
+          const groupedByName = baData.reduce((acc: { [key: string]: GroupedPersonnel }, curr: any) => {
+            const name = curr.personnel_name;
+            if (!name) return acc;
+
+            const fullName = name.toLowerCase();
+            const nameParts = name.split(' ');
+            const nameWithoutRank = nameParts.slice(1).join(' ').toLowerCase();
+            let grouping = groupingMap.get(fullName) || groupingMap.get(nameWithoutRank) || 'Marine Firefighter';
+            
+            // Special case for SGT3 Mustaqim - ensure he's categorized as a Regular
+            if (name.includes('SGT3') || name.toLowerCase().includes('mustaqim')) {
+              grouping = 'Marine Section Commander'; // This will map to REGULARS in getCategory
+            }
+
+            if (!acc[name]) {
+              acc[name] = {
+                name,
+                grouping,
+                vessel_backplate: null,
+                vessel_cylinder: null,
+                lfav_backplate: null,
+                lfav_cylinder: null
+              };
+            }
+
+            acc[name].vessel_backplate = curr.vessel_backplate || acc[name].vessel_backplate;
+            acc[name].vessel_cylinder = curr.vessel_cylinder || acc[name].vessel_cylinder;
+            acc[name].lfav_backplate = curr.lfav_backplate || acc[name].lfav_backplate;
+            acc[name].lfav_cylinder = curr.lfav_cylinder || acc[name].lfav_cylinder;
+
+            return acc;
+          }, {});
+
+          // Sort the data
+          const groupedArray = Object.values(groupedByName).sort((a: unknown, b: unknown) => {
+            const personA = a as GroupedPersonnel;
+            const personB = b as GroupedPersonnel;
+            
+            const categoryA = getCategory(personA.grouping);
+            const categoryB = getCategory(personB.grouping);
+            
+            const indexA = groupingOrder.indexOf(categoryA);
+            const indexB = groupingOrder.indexOf(categoryB);
+            
+            if (indexA !== indexB) return indexA - indexB;
+            
+            if ((categoryA === 'REGULARS' && categoryB === 'REGULARS') ||
+                (categoryA === 'NS MARINE FIREFIGHTER' && categoryB === 'NS MARINE FIREFIGHTER')) {
+              return getRankOrder(personA.name) - getRankOrder(personB.name);
+            }
+            
+            return personA.name.localeCompare(personB.name);
+          }) as GroupedPersonnel[];
+
+          setGroupedPersonnel(groupedArray);
         });
-        
-        // Group and process BA data
-        const groupedByName = baData.reduce((acc: { [key: string]: GroupedPersonnel }, curr) => {
-          const name = curr.personnel_name;
-          if (!name) return acc;
-
-          const fullName = name.toLowerCase();
-          const nameParts = name.split(' ');
-          const nameWithoutRank = nameParts.slice(1).join(' ').toLowerCase();
-          let grouping = groupingMap.get(fullName) || groupingMap.get(nameWithoutRank) || 'Marine Firefighter';
-          
-          // Special case for SGT3 Mustaqim - ensure he's categorized as a Regular
-          if (name.includes('SGT3') || name.toLowerCase().includes('mustaqim')) {
-            grouping = 'Marine Section Commander'; // This will map to REGULARS in getCategory
-          }
-
-          if (!acc[name]) {
-            acc[name] = {
-          name,
-              grouping,
-              vessel_backplate: null,
-              vessel_cylinder: null,
-              lfav_backplate: null,
-              lfav_cylinder: null
-            };
-          }
-
-          acc[name].vessel_backplate = curr.vessel_backplate || acc[name].vessel_backplate;
-          acc[name].vessel_cylinder = curr.vessel_cylinder || acc[name].vessel_cylinder;
-          acc[name].lfav_backplate = curr.lfav_backplate || acc[name].lfav_backplate;
-          acc[name].lfav_cylinder = curr.lfav_cylinder || acc[name].lfav_cylinder;
-
-          return acc;
-        }, {});
-
-        // Sort the data
-        const groupedArray = Object.values(groupedByName).sort((a, b) => {
-          const categoryA = getCategory(a.grouping);
-          const categoryB = getCategory(b.grouping);
-          
-          const indexA = groupingOrder.indexOf(categoryA);
-          const indexB = groupingOrder.indexOf(categoryB);
-          
-          if (indexA !== indexB) return indexA - indexB;
-          
-          if ((categoryA === 'REGULARS' && categoryB === 'REGULARS') ||
-              (categoryA === 'NS MARINE FIREFIGHTER' && categoryB === 'NS MARINE FIREFIGHTER')) {
-            return getRankOrder(a.name) - getRankOrder(b.name);
-          }
-          
-          return a.name.localeCompare(b.name);
-        });
-
-        setGroupedPersonnel(groupedArray);
       } catch (error) {
         console.error('Error processing data:', error);
+        setConnectionFailed(true);
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     }
-
+    
     async function setupRealtimeSubscription() {
-      if (!mounted) return;
+      if (!mounted || !supabase) return;
       
-      if (retryCount >= maxRetries) {
-        console.error('Max retries reached for realtime subscription');
-        return;
-      }
-
       try {
-        // Clean up any existing channel before creating a new one
-        if (channel) {
-          try {
-            await supabase.removeChannel(channel);
-          } catch (err) {
-            console.warn('Error removing existing channel:', err);
-            // Continue even if there's an error removing the channel
+        // First, check for any existing data channels and remove them
+        const channels = supabase.getChannels();
+        const existingDataChannels = channels.filter((ch: RealtimeChannel) => 
+          ch.topic.startsWith('realtime:main-data-')
+        );
+        
+        // If there are existing channels, clean them up first
+        for (const ch of existingDataChannels) {
+          if (ch !== realtimeChannel) {
+            try {
+              console.log(`Cleaning up old data channel: ${ch.topic}`);
+              await supabase.removeChannel(ch);
+              if (ch.topic) {
+                untrackChannel(ch.topic.replace('realtime:', ''));
+              }
+            } catch (err) {
+              console.warn('Error removing existing data channel:', err);
+            }
           }
         }
-
-        // Create a new channel with a unique name
-        const channelName = `ppe_check_${Date.now()}`;
-        channel = supabase.channel(channelName, {
-          config: {
-            broadcast: { ack: true },
-            presence: { key: '' }
+        
+        // Clean up existing channel
+        if (realtimeChannel) {
+          try {
+            await supabase.removeChannel(realtimeChannel);
+            console.log('Removed existing realtime channel');
+            // Remove from active channels if it's there
+            if (realtimeChannel.topic) {
+              untrackChannel(realtimeChannel.topic.replace('realtime:', ''));
+            }
+          } catch (err) {
+            console.warn('Error removing existing channel:', err);
           }
-        });
+          realtimeChannel = null;
+        }
 
-        // Set up all the listeners before subscribing
-        channel
+        // Create a unique channel name with a timestamp and component identifier
+        const channelName = `main-data-${Date.now()}`;
+        console.log(`Creating new channel: ${channelName}`);
+        
+        // Track this channel
+        trackChannel(channelName);
+        
+        // Create the channel
+        realtimeChannel = supabase.channel(channelName);
+        
+        if (!realtimeChannel) {
+          throw new Error('Failed to create realtime channel');
+        }
+        
+        // Configure all event listeners BEFORE subscribing
+        realtimeChannel
           .on('postgres_changes', { 
             event: '*', 
             schema: 'public', 
             table: 'personnel'
-          }, () => mounted && fetchData())
+          }, () => {
+            console.log('Personnel table changed, refetching data');
+            if (mounted) fetchData();
+          })
           .on('postgres_changes', { 
             event: '*', 
             schema: 'public', 
             table: 'vehicle_assignments'
-          }, () => mounted && fetchData())
+          }, () => {
+            console.log('Vehicle assignments table changed, refetching data');
+            if (mounted) fetchData();
+          })
           .on('postgres_changes', { 
             event: '*', 
             schema: 'public', 
             table: 'ba_master_list'
-          }, () => mounted && fetchData())
-          .on('system', { event: '*' }, (payload: { event: string; [key: string]: any }) => {
-            console.log('System event:', payload);
+          }, () => {
+            console.log('BA master list table changed, refetching data');
+            if (mounted) fetchData();
           });
-
-        // Subscribe with error handling
-        const status = await channel.subscribe(async (status: string, err: any) => {
-          if (!mounted) return;
-          
-          console.log(`Subscription status: ${status}`, err || '');
+        
+        // Finally, subscribe to the channel
+        console.log('Subscribing to channel:', channelName);
+        const status = await realtimeChannel.subscribe((status) => {
+          console.log(`Channel status for ${channelName}:`, status);
           
           if (status === 'SUBSCRIBED') {
-            console.log('Successfully subscribed to changes');
-            retryCount = 0; // Reset retry count on successful subscription
-            await fetchData();
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            console.error(`Channel ${status}:`, err);
-            // Only retry if we're still mounted and haven't reached max retries
+            console.log('Successfully subscribed to tables');
+            retryCount = 0;
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('Channel error');
             if (mounted && retryCount < maxRetries) {
               retrySubscription();
             }
           }
         });
-
-        console.log('Channel setup completed:', status);
+        
+        console.log('Subscription status:', status);
       } catch (error) {
         console.error('Error setting up subscription:', error);
         if (mounted && retryCount < maxRetries) {
@@ -355,12 +469,16 @@ function PPECheckClient() {
         const delay = Math.min(1000 * Math.pow(2, retryCount), 10000); // Exponential backoff with 10s max
         console.log(`Retrying subscription in ${delay}ms (attempt ${retryCount} of ${maxRetries})...`);
         
-        clearTimeout(retryTimeout);
+        if (retryTimeout) {
+          clearTimeout(retryTimeout);
+        }
         retryTimeout = setTimeout(() => {
           if (mounted) {
             setupRealtimeSubscription();
           }
         }, delay);
+      } else {
+        setConnectionFailed(true);
       }
     }
 
@@ -369,33 +487,167 @@ function PPECheckClient() {
     fetchSubmittedResponses();
     setupRealtimeSubscription();
     
-    // Set up real-time subscription for form responses
-    const formResponsesSubscription = supabase
-      .channel('form-responses-changes')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'form_responses',
-      }, (payload) => {
-        console.log('Form response change detected:', payload);
-        // Refresh the submitted responses when a new one is added
-        fetchSubmittedResponses();
-      })
-      .subscribe((status) => {
-        console.log('Form responses subscription status:', status);
-      });
-      
     // Cleanup
     return () => {
       mounted = false;
-      clearTimeout(retryTimeout);
-      if (channel) {
-        console.log('Cleaning up subscription...');
-        supabase.removeChannel(channel);
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
       }
-      supabase.removeChannel(formResponsesSubscription);
+      if (realtimeChannel && supabase) {
+        console.log('Cleaning up realtime subscription...');
+        supabase.removeChannel(realtimeChannel)
+          .then(() => {
+            // Remove from active channels if successful
+            if (realtimeChannel?.topic) {
+              untrackChannel(realtimeChannel.topic.replace('realtime:', ''));
+            }
+          })
+          .catch((err: Error) => {
+            console.warn('Error cleaning up channel:', err);
+          });
+      }
     };
-  }, []);
+  }, [supabase]);
+  
+  // Also update the form_responses subscription:
+  useEffect(() => {
+    if (!supabase) return;
+    
+    let mounted = true;
+    let formResponsesChannel: RealtimeChannel | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
+    let retryCount = 0;
+    const maxRetries = 5;
+    
+    console.log('Setting up form responses subscription');
+    
+    async function setupFormResponsesSubscription() {
+      if (!supabase || !mounted) return;
+      
+      try {
+        // First, check for any existing form response channels and remove them
+        const channels = supabase.getChannels();
+        const existingFormChannels = channels.filter((ch: RealtimeChannel) => 
+          ch.topic.startsWith('realtime:form_responses-')
+        );
+        
+        // If there are existing channels, clean them up first
+        for (const ch of existingFormChannels) {
+          if (ch !== formResponsesChannel) {
+            try {
+              console.log(`Cleaning up old form response channel: ${ch.topic}`);
+              await supabase.removeChannel(ch);
+              if (ch.topic) {
+                untrackChannel(ch.topic.replace('realtime:', ''));
+              }
+            } catch (err) {
+              console.warn('Error removing existing form response channel:', err);
+            }
+          }
+        }
+        
+        // Clean up existing channel
+        if (formResponsesChannel) {
+          try {
+            await supabase.removeChannel(formResponsesChannel);
+            console.log('Removed existing form responses channel');
+            // Remove from active channels if it's there
+            if (formResponsesChannel.topic) {
+              untrackChannel(formResponsesChannel.topic.replace('realtime:', ''));
+            }
+          } catch (err) {
+            console.warn('Error removing existing form responses channel:', err);
+          }
+          formResponsesChannel = null;
+        }
+        
+        // Create a unique channel name
+        const channelName = `form_responses-${Date.now()}`;
+        console.log(`Creating form responses channel: ${channelName}`);
+        
+        // Track this channel
+        trackChannel(channelName);
+        
+        // Create the channel
+        formResponsesChannel = supabase.channel(channelName);
+        
+        if (!formResponsesChannel) {
+          throw new Error('Failed to create form responses channel');
+        }
+        
+        // Configure listeners BEFORE subscribing
+        formResponsesChannel
+          .on('postgres_changes', { 
+            event: '*', 
+            schema: 'public', 
+            table: 'form_responses',
+            filter: `form_type=eq.ppe_check`
+          }, (payload) => {
+            console.log('Form responses changed:', payload);
+            if (mounted) fetchSubmittedResponses();
+          });
+        
+        // Subscribe to the channel
+        console.log('Subscribing to form responses channel:', channelName);
+        const status = await formResponsesChannel.subscribe((status) => {
+          console.log(`Form responses channel status for ${channelName}:`, status);
+          
+          if (status === 'SUBSCRIBED') {
+            console.log('Successfully subscribed to form responses');
+            retryCount = 0;
+            fetchSubmittedResponses(); // Initial fetch after successful subscription
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('Form responses channel error');
+            if (mounted && retryCount < maxRetries) {
+              retryFormResponsesSubscription();
+            }
+          }
+        });
+        
+        console.log('Form responses subscription status:', status);
+      } catch (error) {
+        console.error('Error setting up form responses subscription:', error);
+        if (mounted && retryCount < maxRetries) {
+          retryFormResponsesSubscription();
+        }
+      }
+    }
+    
+    function retryFormResponsesSubscription() {
+      if (!mounted) return;
+      
+      retryCount++;
+      if (retryCount < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
+        console.log(`Retrying form responses subscription in ${delay}ms (attempt ${retryCount} of ${maxRetries})...`);
+        
+        if (retryTimeout) {
+          clearTimeout(retryTimeout);
+        }
+        retryTimeout = setTimeout(() => {
+          if (mounted) {
+            setupFormResponsesSubscription();
+          }
+        }, delay);
+      }
+    }
+    
+    // Initial setup
+    setupFormResponsesSubscription();
+    
+    return () => {
+      mounted = false;
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+      if (formResponsesChannel && supabase) {
+        console.log('Cleaning up form responses subscription');
+        supabase.removeChannel(formResponsesChannel).catch((err: Error) => {
+          console.warn('Error removing form responses channel:', err);
+        });
+      }
+    };
+  }, [supabase]);
 
   // Add a simpler useEffect to log submitted responses
   useEffect(() => {
@@ -463,6 +715,8 @@ function PPECheckClient() {
     const formattedDate = `${today.getDate().toString().padStart(2, '0')}/${(today.getMonth() + 1).toString().padStart(2, '0')}/${today.getFullYear()}`;
     
     try {
+      if (!supabase) throw new Error("Supabase client not initialized");
+      
       // Get vehicle assignments for the person
       const { data: assignments, error } = await supabase
         .from('vehicle_assignments')
@@ -484,7 +738,7 @@ function PPECheckClient() {
       const baSets: any = {};
       
       // Check for vessel (MRV/RFV) assignment
-      const vesselAssignment = assignments.find(a => a.vehicle_type.includes('MRV') || a.vehicle_type.includes('RFV'));
+      const vesselAssignment = assignments.find((a: {vehicle_type: string}) => a.vehicle_type.includes('MRV') || a.vehicle_type.includes('RFV'));
       if (vesselAssignment) {
         const vesselType = vesselAssignment.vehicle_type.replace(/(\d+)/, ' $1'); // Add space before numbers
         if (person.vessel_backplate && person.vessel_cylinder) {
@@ -499,7 +753,7 @@ function PPECheckClient() {
       }
       
       // Check for LF assignment
-      const lfAssignment = assignments.find(a => a.vehicle_type.includes('LF'));
+      const lfAssignment = assignments.find((a: {vehicle_type: string}) => a.vehicle_type.includes('LF'));
       if (lfAssignment) {
         const lfType = lfAssignment.vehicle_type.replace(/(\d+)/, ' $1'); // Add space before numbers
         if (person.lfav_backplate && person.lfav_cylinder) {
@@ -806,79 +1060,103 @@ function PPECheckClient() {
     }
   }, [groupedPersonnel]);
 
-  // Subscribe to changes in the form_responses table
+  // Add another useEffect for component unmount cleanup of ALL channels
   useEffect(() => {
-    if (!supabase) return;
-    
-    console.log('Setting up subscription to form_responses table');
-    
-    let channel: RealtimeChannel | null = null;
-    try {
-      channel = supabase
-        .channel('form_responses_changes')
-        .on('postgres_changes', 
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'form_responses',
-            filter: `form_type=eq.ppe_check`
-          }, 
-          (payload) => {
-            console.log('Detected change in form_responses table:', payload);
-            fetchSubmittedResponses();
-          }
-        )
-        .subscribe((status) => {
-          console.log('Form responses subscription status:', status);
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            console.error(`Form responses channel ${status}`);
-          }
-        });
-    } catch (error) {
-      console.error('Error setting up form_responses subscription:', error);
-    }
-      
     return () => {
-      console.log('Cleaning up form_responses subscription');
-      if (channel) {
-        try {
-          supabase.removeChannel(channel);
-        } catch (err) {
-          console.warn('Error removing form_responses channel:', err);
-        }
+      if (supabase) {
+        // Delay cleanup to prevent interference with other unmounting components
+        setTimeout(() => cleanupAllChannels(supabase), 500);
       }
     };
   }, [supabase]);
+
+  // Add the connection error UI
+  if (connectionFailed) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+          <div className="text-red-500 text-xl font-semibold">Connection Failed</div>
+          <p className="text-center max-w-md text-gray-600 dark:text-gray-300">
+            Could not connect to the database. This might be due to network issues or missing environment variables.
+          </p>
+          <Button 
+            onClick={handleManualReconnect} 
+            disabled={isReconnecting}
+            className="mt-4"
+          >
+            {isReconnecting ? 'Reconnecting...' : 'Reconnect'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) return (
     <div className="flex-1 flex items-center justify-center">Loading...</div>
   );
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-8 relative">
       <div className="flex flex-col space-y-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <h1 className="text-2xl font-bold">PPE Check</h1>
         </div>
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex-1"></div>
-          <div className="relative w-full sm:w-64 md:w-80">
+        {/* Persistent Search Bar - Always visible and fixed at top on mobile */}
+        <div 
+          ref={searchContainerRef} 
+          className={`sticky top-0 z-40 bg-background pt-2 pb-2 px-2 -mx-2 shadow-md rounded-b-md transition-all duration-300 ${
+            isSearchActive ? 'border-b border-gray-200 dark:border-gray-800' : ''
+          }`}
+        >
+          <div className="relative w-full">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
             <Input 
+              ref={searchInputRef}
               type="search" 
               placeholder="Search personnel or equipment..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full"
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                if (e.target.value) {
+                  setIsSearchActive(true);
+                  setIsBookmarkletCollapsed(true);
+                }
+              }}
+              onFocus={handleSearchFocus}
+              onBlur={handleSearchBlur}
+              className={`pl-10 w-full pr-8 transition-all ${
+                isSearchActive ? 'h-12 text-base' : 'h-10 text-sm'
+              }`}
               aria-label="Search personnel or equipment"
             />
+            {searchTerm && (
+              <button 
+                onClick={handleCloseSearch}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 p-1"
+                aria-label="Clear search"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Bookmarklet Instructions */}
-        <BookmarkletInstructions />
+        {/* Collapsible Bookmarklet Instructions */}
+        <div className={`overflow-hidden transition-all duration-300 ${isBookmarkletCollapsed ? 'max-h-12' : 'max-h-[1000px]'}`}>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-base font-medium">Quick Access Instructions</h3>
+            <button 
+              onClick={toggleBookmarklet}
+              className="text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-300 p-1 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800"
+            >
+              {isBookmarkletCollapsed ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+            </button>
+          </div>
+          <div className={`transition-opacity duration-300 ${isBookmarkletCollapsed ? 'opacity-0' : 'opacity-100'}`}>
+            <BookmarkletInstructions />
+          </div>
+        </div>
 
         {isLoading ? (
           <div className="flex justify-center items-center h-64">
@@ -1037,51 +1315,49 @@ function PPECheckClient() {
                           </div>
                         </div>
                         
-                        {/* Actions */}
-                        <div className="mt-5">
-                          <div className="flex gap-2">
+                        {/* Actions - Improved for better touch responsiveness */}
+                        <div className="mt-6">
+                          <div className="grid grid-cols-2 gap-3">
                             <Button
                               variant="outline"
-                              size="default"
+                              size="lg"
                               onClick={() => handleFormFill(person)}
-                              className="flex items-center justify-center h-10 flex-1"
+                              className="h-12 w-full touch-manipulation"
                             >
                               <Copy className="h-4 w-4 mr-2" />
                               Fill Form
                             </Button>
                             
-                            <div className="relative flex-1">
-                              <Button
-                                variant={submittedResponses[person.name] ? "outline" : "default"}
-                                size="default"
-                                onClick={() => {
-                                  setSelectedPerson(person);
-                                  if (submittedResponses[person.name]) {
-                                    handleViewResponseId(person.name, submittedResponses[person.name]);
-                                  } else {
-                                    handleSubmitResponseId();
-                                  }
-                                }}
-                                className={cn(
-                                  "flex items-center justify-center h-10 w-full",
-                                  submittedResponses[person.name]
-                                    ? "border-blue-500 text-blue-500 hover:bg-blue-50"
-                                    : "bg-green-600 hover:bg-green-700 text-white"
-                                )}
-                              >
-                                {submittedResponses[person.name] ? (
-                                  <>
-                                    <FileCheck className="h-4 w-4 mr-2" />
-                                    View ID
-                                  </>
-                                ) : (
-                                  <>
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Submit ID
-                                  </>
-                                )}
-                              </Button>
-                            </div>
+                            <Button
+                              variant={submittedResponses[person.name] ? "outline" : "default"}
+                              size="lg"
+                              onClick={() => {
+                                setSelectedPerson(person);
+                                if (submittedResponses[person.name]) {
+                                  handleViewResponseId(person.name, submittedResponses[person.name]);
+                                } else {
+                                  handleSubmitResponseId();
+                                }
+                              }}
+                              className={cn(
+                                "h-12 w-full touch-manipulation relative z-10",
+                                submittedResponses[person.name]
+                                  ? "border-blue-500 text-blue-500 hover:bg-blue-50"
+                                  : "bg-green-600 hover:bg-green-700 text-white"
+                              )}
+                            >
+                              {submittedResponses[person.name] ? (
+                                <>
+                                  <FileCheck className="h-4 w-4 mr-2" />
+                                  View ID
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  Submit ID
+                                </>
+                              )}
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -1092,9 +1368,9 @@ function PPECheckClient() {
                         No personnel found
                       </div>
                     )}
-                                  </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </CardContent>
+              </Card>
               );
           })
         )}
