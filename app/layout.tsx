@@ -5,12 +5,19 @@ import { ThemeProvider } from './providers/theme-provider'
 import './globals.css'
 import '@fontsource/azeret-mono/400.css' // Regular
 import '@fontsource/azeret-mono/500.css' // Medium
+import { Metadata } from 'next'
 
 const inter = Inter({ subsets: ['latin'] })
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'FireTrack Dashboard',
   description: 'Fire Department Resource Management System',
+  viewport: {
+    width: 'device-width',
+    initialScale: 1.0,
+    maximumScale: 5.0,
+    userScalable: true,
+  },
 }
 
 export default function RootLayout({
@@ -21,7 +28,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta 
+          name="viewport" 
+          content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes"
+        />
       </head>
       <body className={inter.className}>
         <ThemeProvider defaultTheme="dark">

@@ -34,7 +34,7 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
     // Reset exiting state after animation completes
     const timer = setTimeout(() => {
       setIsExiting(false)
-    }, 80) // Further reduced animation duration
+    }, 150) // Match this with animation duration
     
     return () => clearTimeout(timer)
   }, [isProcessing, isExiting])
@@ -48,7 +48,7 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
 
     if (isMenuOpen) {
       document.addEventListener('mousedown', handleClickAway)
-      document.addEventListener('touchstart', handleClickAway, { passive: true })
+      document.addEventListener('touchstart', handleClickAway)
     }
 
     return () => {
@@ -104,17 +104,22 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
     
     setIsProcessing(true)
     
-    // Execute callback immediately and close menu faster
+    // Execute callback immediately but keep menu open until callback completes
     if (onEdit) {
+      // Start closing animation immediately
       setIsMenuOpen(false)
       setIsExiting(true)
       
-      // Execute the edit action immediately
-      onEdit()
-      
-      // Reset states immediately
-      setIsProcessing(false)
-      setIsExiting(false)
+      // Execute the edit action with minimal delay
+      requestAnimationFrame(() => {
+        onEdit()
+        
+        // Reset states after a short delay
+        requestAnimationFrame(() => {
+          setIsProcessing(false)
+          setIsExiting(false)
+        })
+      })
     } else {
       closeMenu()
       setIsProcessing(false)
@@ -129,15 +134,22 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
     
     // Execute callback immediately
     if (onClear) {
+      // Start closing animation immediately
       setIsMenuOpen(false)
       setIsExiting(true)
       
       // Execute the clear action immediately
       onClear()
       
-      // Reset processing state immediately
-      setIsProcessing(false)
-      setIsExiting(false)
+      // Reset processing state after a minimal delay to allow UI to update
+      requestAnimationFrame(() => {
+        setIsProcessing(false)
+        
+        // Reset exiting state slightly later to ensure animations complete
+        setTimeout(() => {
+          setIsExiting(false)
+        }, 100)
+      })
     } else {
       closeMenu()
       setIsProcessing(false)
@@ -145,11 +157,7 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
   }
 
   return (
-    <div 
-      ref={containerRef} 
-      className="relative border-b border-gray-200 dark:border-gray-800"
-      style={{ touchAction: "manipulation" }}
-    >
+    <div ref={containerRef} className="relative touch-pan-y border-b border-gray-200 dark:border-gray-800">
       {/* Overlay to block interactions when menu is open */}
       <AnimatePresence>
         {isMenuOpen && (
@@ -157,7 +165,7 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.08 }}
+            transition={{ duration: 0.1 }}
             className="absolute inset-0 bg-black/5 dark:bg-black/20 z-40"
             onClick={() => !isProcessing && !isExiting && closeMenu()}
           />
@@ -177,9 +185,9 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
         }}
         transition={{ 
           type: "spring", 
-          stiffness: 700, 
-          damping: 40,
-          opacity: { duration: 0.08 }
+          stiffness: 550, 
+          damping: 30,
+          opacity: { duration: 0.1 }
         }}
       >
         <motion.button
@@ -188,8 +196,10 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
             "p-2.5 rounded-full bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 transition-colors",
             (isProcessing || isExiting) && "opacity-50 pointer-events-none"
           )}
-          whileTap={{ scale: 1 }}
-          aria-label="Edit"
+          whileTap={{ scale: 0.95 }}
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.1 }}
         >
           <Pencil className="w-5 h-5 text-white" />
         </motion.button>
@@ -199,8 +209,10 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
             "p-2.5 rounded-full bg-neutral-800 hover:bg-neutral-700 active:bg-neutral-600 transition-colors",
             (isProcessing || isExiting) && "opacity-50 pointer-events-none"
           )}
-          whileTap={{ scale: 1 }}
-          aria-label="Clear"
+          whileTap={{ scale: 0.95 }}
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.1 }}
         >
           <Trash2 className="w-5 h-5 text-white" />
         </motion.button>
@@ -219,18 +231,19 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
           x: isMenuOpen ? MAX_SWIPE : 0,
           transition: { 
             type: "spring", 
-            stiffness: 700, 
-            damping: 40,
-            duration: 0.08
+            stiffness: 550, 
+            damping: 30,
+            duration: 0.15
           }
         }}
         className={cn(
-          "relative bg-white dark:bg-neutral-900 will-change-transform",
+          "relative bg-white dark:bg-neutral-900 touch-pan-y will-change-transform",
+          // Only disable pointer events when menu is open, not during exiting state
           isMenuOpen && "pointer-events-none",
+          // Always apply select-none to prevent text selection during swipe
           "select-none",
           className
         )}
-        style={{ touchAction: "pan-y" }}
       >
         {children}
       </motion.div>

@@ -65,62 +65,12 @@
     opacity: 1;
   }
   50% {
-    opacity: 0.6;
+    opacity: 0.4;
   }
 }
 
 .animate-pulse-medium {
   animation: pulse-medium 0.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Mobile touch optimizations */
-@media (max-width: 768px) {
-  /* Improve touch responsiveness for clickable elements */
-  button, 
-  a[role="button"], 
-  .button, 
-  [type="button"], 
-  [type="submit"], 
-  [type="reset"],
-  [role="button"],
-  .checkbox,
-  label[for],
-  select,
-  .active-scale {
-    touch-action: manipulation;
-  }
-
-  /* Removes 300ms click delay on mobile */
-  a, button, input, select, textarea, label, summary {
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  /* Improve touch target sizes - reduced from 24px to 20px */
-  .checkbox, 
-  [type="checkbox"], 
-  [type="radio"] {
-    min-width: 20px;
-    min-height: 20px;
-  }
-
-  /* Active state feedback for touch */
-  .active-feedback:active {
-    opacity: 0.8;
-    transform: scale(0.99);
-    transition: all 0.05s ease-in-out;
-  }
-
-  /* Global styles to improve mobile UX */
-  html, body {
-    touch-action: manipulation;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: none;
-  }
-
-  /* Allow zooming with pinch */
-  html {
-    touch-action: pan-x pan-y;
-  }
 }
 
 /* Custom styles for BA Master List */
