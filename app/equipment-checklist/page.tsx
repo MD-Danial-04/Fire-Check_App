@@ -863,6 +863,15 @@ export default function EquipmentChecklistPage() {
       checked
     };
     
+    // If checking the box, show highlight animation
+    if (checked) {
+      setHighlightedCheckbox({ sectionIndex, itemIndex });
+      // Remove highlight after animation
+      setTimeout(() => {
+        setHighlightedCheckbox(null);
+      }, 300); // Reduced from 650ms to 300ms for faster feedback
+    }
+    
     // Use a more targeted state update approach
     setSections(prevSections => {
       const updatedSections = [...prevSections];
@@ -1731,11 +1740,16 @@ export default function EquipmentChecklistPage() {
                                       handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
                                     }
                                     className={cn(
-                                      "h-5 w-5 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-150",
+                                      "h-5 w-5 cursor-pointer",
+                                      "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+                                      "transition-all duration-100 ease-in-out",
+                                      "hover:scale-105",
+                                      "active:scale-95",
+                                      "transform-gpu",
                                       highlightedCheckbox && 
                                       highlightedCheckbox.sectionIndex === sectionIndex && 
                                       highlightedCheckbox.itemIndex === itemIndex ? 
-                                      "ring-2 ring-primary ring-offset-2 transition-all duration-150" : ""
+                                      "ring-2 ring-primary ring-offset-2 animate-pulse" : ""
                                     )}
                                     aria-label={`Mark ${item.name} as checked`}
                                   />
@@ -2013,11 +2027,15 @@ export default function EquipmentChecklistPage() {
                                         handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
                                       }
                                       className={cn(
-                                        "h-5 w-5 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-150",
+                                        "h-5 w-5 cursor-pointer",
+                                        "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+                                        "transform-gpu will-change-transform",
+                                        "transition-[background-color,border-color,transform] duration-50 ease-out",
+                                        "active:scale-95",
                                         highlightedCheckbox && 
                                         highlightedCheckbox.sectionIndex === sectionIndex && 
                                         highlightedCheckbox.itemIndex === itemIndex ? 
-                                        "ring-2 ring-primary ring-offset-2 transition-all duration-150" : ""
+                                        "ring-2 ring-primary ring-offset-2" : ""
                                       )}
                                     />
                                   </div>
@@ -2091,11 +2109,15 @@ export default function EquipmentChecklistPage() {
                                         handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
                                       }
                                       className={cn(
-                                        "h-5 w-5 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-150",
+                                        "h-5 w-5 cursor-pointer",
+                                        "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+                                        "transform-gpu will-change-transform",
+                                        "transition-[background-color,border-color,transform] duration-50 ease-out",
+                                        "active:scale-95",
                                         highlightedCheckbox && 
                                         highlightedCheckbox.sectionIndex === sectionIndex && 
                                         highlightedCheckbox.itemIndex === itemIndex ? 
-                                        "ring-2 ring-primary ring-offset-2 transition-all duration-150" : ""
+                                        "ring-2 ring-primary ring-offset-2" : ""
                                       )}
                                     />
                                   </div>
@@ -2123,27 +2145,14 @@ export default function EquipmentChecklistPage() {
                           )}>
                             {/* Top Row: Vehicle & Status */}
                             <div className="px-3 pt-2">
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="flex-1">
+                              <div className="grid grid-cols-12 items-center">
+                                <div className="col-span-10">
                                   <div className="text-xs font-medium text-neutral-700 dark:text-neutral-300 truncate">
                                     {item.name}
                                   </div>
                                 </div>
-                                <div className="flex justify-end">
-                                  <Checkbox 
-                                    id={`${section.title}-${item.id}-mobile`}
-                                    checked={item.checked}
-                                    onCheckedChange={(checked) => 
-                                      handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
-                                    }
-                                    className={cn(
-                                      "h-5 w-5 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-150",
-                                      highlightedCheckbox && 
-                                      highlightedCheckbox.sectionIndex === sectionIndex && 
-                                      highlightedCheckbox.itemIndex === itemIndex ? 
-                                      "ring-2 ring-primary ring-offset-2 transition-all duration-150" : ""
-                                    )}
-                                  />
+                                <div className="col-span-2 flex justify-center">
+                                  <Checkbox />
                                 </div>
                               </div>
                             </div>
