@@ -106,6 +106,9 @@ export default function EquipmentChecklistPage() {
   // Add a state for reset vehicles dialog
   const [isResetVehiclesDialogOpen, setIsResetVehiclesDialogOpen] = useState(false);
 
+  // Add at the beginning of the component, after useState declarations
+  const [lastTapped, setLastTapped] = useState<{sectionIndex: number, itemIndex: number} | null>(null);
+
   // Fetch personnel data from Supabase
   useEffect(() => {
     async function fetchPersonnel() {
@@ -1107,7 +1110,7 @@ export default function EquipmentChecklistPage() {
   };
 
   // Add CSS transition to input field
-  const inputStyle = "transition: border-color 0.3s ease-in-out;";
+  const inputStyle = "transition: border-color 0.2s ease-in-out;";
 
   // Clean up all pending save timers on unmount
   useEffect(() => {
@@ -1578,7 +1581,7 @@ export default function EquipmentChecklistPage() {
                 variant="outline"
                 size="sm"
                 onClick={handleRefresh}
-                className="h-8 sm:h-10 px-2 sm:px-4 flex items-center gap-1"
+                className="h-8 sm:h-10 px-2 sm:px-4 flex items-center gap-1 active-feedback"
                 disabled={isSaving || isLoading}
                 aria-label="Refresh"
               >
@@ -1727,17 +1730,19 @@ export default function EquipmentChecklistPage() {
                                   <Checkbox 
                                     id={`${section.title}-${item.id}-desktop`}
                                     checked={item.checked}
-                                    onCheckedChange={(checked) => 
-                                      handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
-                                    }
+                                    onCheckedChange={(checked) => {
+                                      setLastTapped({sectionIndex, itemIndex});
+                                      setTimeout(() => setLastTapped(null), 50);
+                                      handleCheckboxChange(sectionIndex, itemIndex, checked as boolean);
+                                    }}
                                     className={cn(
-                                      "h-5 w-5 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-150",
+                                      "h-6 w-6 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-50",
                                       highlightedCheckbox && 
                                       highlightedCheckbox.sectionIndex === sectionIndex && 
                                       highlightedCheckbox.itemIndex === itemIndex ? 
-                                      "ring-2 ring-primary ring-offset-2 transition-all duration-150" : ""
+                                      "ring-2 ring-primary ring-offset-2 transition-all duration-50" : ""
                                     )}
-                                    aria-label={`Mark ${item.name} as checked`}
+                                    aria-label={`Mark ${item.name} as ${item.checked ? 'unchecked' : 'checked'}`}
                                   />
                                   {item.required && !item.checked && (
                                     <span className="ml-1 text-red-500 animate-pulse-medium">*</span>
@@ -1801,7 +1806,10 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full">
+                                    <SelectTrigger 
+                                      className="w-full h-9 text-xs min-h-0 py-0 px-2 transition-all duration-100 active-feedback" 
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Select checker" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1829,13 +1837,16 @@ export default function EquipmentChecklistPage() {
                                     value={item.status || ""}
                                     onValueChange={(value) => handleStatusChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className={cn(
-                                        "w-full transition-all duration-150 border",
+                                    <SelectTrigger 
+                                      className={cn(
+                                        "w-full transition-all duration-150 border active-feedback",
                                         "focus:border-amber-300 focus:ring-amber-500",
                                         item.assignedTo && (item.status === "Pending" || !item.status)
                                           ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 animate-pulse-medium" 
                                           : ""
-                                    )}>
+                                      )}
+                                      aria-label={`Select fuel level for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Select fuel level" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1963,10 +1974,15 @@ export default function EquipmentChecklistPage() {
                           onClear={() => handleClearItem(sectionIndex, itemIndex)}
                           isChecked={item.checked}
                         >
-                          <div className={cn(
-                            "border-t border-gray-100 dark:border-gray-800 first:border-t-0",
-                            item.checked ? "bg-muted/40 dark:bg-muted/30" : ""
-                          )}>
+                          <div 
+                            className={cn(
+                              "border-t border-gray-100 dark:border-gray-800 first:border-t-0",
+                              item.checked ? "bg-muted/40 dark:bg-muted/30" : "",
+                              lastTapped && lastTapped.sectionIndex === sectionIndex && lastTapped.itemIndex === itemIndex 
+                                ? "bg-muted/60 dark:bg-muted/50" : ""
+                            )}
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
+                          >
                             <div className="px-3 py-2">
                               <div className="grid grid-cols-12 items-center gap-2">
                                 <div className="col-span-4 text-xs font-medium text-neutral-700 dark:text-neutral-300 truncate">
@@ -1977,7 +1993,10 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full h-7 text-xs min-h-0 py-0 px-2 transition-all duration-150">
+                                    <SelectTrigger 
+                                      className="w-full h-9 text-xs min-h-0 py-0 px-2 transition-all duration-100" 
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Select checker" className="truncate" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1992,7 +2011,7 @@ export default function EquipmentChecklistPage() {
                                         <React.Fragment key={group}>
                                           <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group}</div>
                                           {members && members.length > 0 ? members.map((checker) => (
-                                            <SelectItem key={checker} value={checker} className="text-xs py-1">
+                                            <SelectItem key={checker} value={checker} className="text-xs py-1.5">
                                               {checker}
                                             </SelectItem>
                                           )) : (
@@ -2009,16 +2028,19 @@ export default function EquipmentChecklistPage() {
                                     <Checkbox 
                                       id={`${section.title}-${item.id}-mobile`}
                                       checked={item.checked}
-                                      onCheckedChange={(checked) => 
-                                        handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
-                                      }
+                                      onCheckedChange={(checked) => {
+                                        setLastTapped({sectionIndex, itemIndex});
+                                        setTimeout(() => setLastTapped(null), 50);
+                                        handleCheckboxChange(sectionIndex, itemIndex, checked as boolean);
+                                      }}
                                       className={cn(
-                                        "h-5 w-5 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-150",
+                                        "h-6 w-6 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-50",
                                         highlightedCheckbox && 
                                         highlightedCheckbox.sectionIndex === sectionIndex && 
                                         highlightedCheckbox.itemIndex === itemIndex ? 
-                                        "ring-2 ring-primary ring-offset-2 transition-all duration-150" : ""
+                                        "ring-2 ring-primary ring-offset-2 transition-all duration-50" : ""
                                       )}
+                                      aria-label={`Mark ${item.name} as ${item.checked ? 'unchecked' : 'checked'}`}
                                     />
                                   </div>
                                 </div>
@@ -2046,10 +2068,15 @@ export default function EquipmentChecklistPage() {
                           onClear={() => handleClearItem(sectionIndex, itemIndex)}
                           isChecked={item.checked}
                         >
-                          <div className={cn(
-                            "border-t border-gray-100 dark:border-gray-800 first:border-t-0",
-                            item.checked ? "bg-muted/40 dark:bg-muted/30" : ""
-                          )}>
+                          <div 
+                            className={cn(
+                              "border-t border-gray-100 dark:border-gray-800 first:border-t-0",
+                              item.checked ? "bg-muted/40 dark:bg-muted/30" : "",
+                              lastTapped && lastTapped.sectionIndex === sectionIndex && lastTapped.itemIndex === itemIndex 
+                                ? "bg-muted/60 dark:bg-muted/50" : ""
+                            )}
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
+                          >
                             <div className="px-3 py-2">
                               <div className="grid grid-cols-12 items-center gap-2">
                                 <div className="col-span-4 text-xs font-medium text-neutral-700 dark:text-neutral-300 truncate">
@@ -2060,7 +2087,10 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full h-7 text-xs min-h-0 py-0 px-2 transition-all duration-150">
+                                    <SelectTrigger 
+                                      className="w-full h-9 text-xs min-h-0 py-0 px-2 transition-all duration-100 active-feedback" 
+                                      aria-label={`Select assignee for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Assigned To" className="truncate" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2070,7 +2100,7 @@ export default function EquipmentChecklistPage() {
                                         <React.Fragment key={group}>
                                           <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group}</div>
                                           {members && members.length > 0 ? members.map((checker) => (
-                                            <SelectItem key={checker} value={checker} className="text-xs py-1">
+                                            <SelectItem key={checker} value={checker} className="text-xs py-1.5">
                                               {checker}
                                             </SelectItem>
                                           )) : (
@@ -2087,16 +2117,19 @@ export default function EquipmentChecklistPage() {
                                     <Checkbox 
                                       id={`${section.title}-${item.id}-mobile`}
                                       checked={item.checked}
-                                      onCheckedChange={(checked) => 
-                                        handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
-                                      }
+                                      onCheckedChange={(checked) => {
+                                        setLastTapped({sectionIndex, itemIndex});
+                                        setTimeout(() => setLastTapped(null), 50);
+                                        handleCheckboxChange(sectionIndex, itemIndex, checked as boolean);
+                                      }}
                                       className={cn(
-                                        "h-5 w-5 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-150",
+                                        "h-6 w-6 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-50",
                                         highlightedCheckbox && 
                                         highlightedCheckbox.sectionIndex === sectionIndex && 
                                         highlightedCheckbox.itemIndex === itemIndex ? 
-                                        "ring-2 ring-primary ring-offset-2 transition-all duration-150" : ""
+                                        "ring-2 ring-primary ring-offset-2 transition-all duration-50" : ""
                                       )}
+                                      aria-label={`Mark ${item.name} as ${item.checked ? 'unchecked' : 'checked'}`}
                                     />
                                   </div>
                                 </div>
@@ -2117,10 +2150,15 @@ export default function EquipmentChecklistPage() {
                           onClear={() => handleClearItem(sectionIndex, itemIndex)}
                           isChecked={item.checked}
                         >
-                          <div className={cn(
-                            "border-t border-gray-100 dark:border-gray-800 first:border-t-0",
-                            item.checked ? "bg-muted/40 dark:bg-muted/30" : ""
-                          )}>
+                          <div 
+                            className={cn(
+                              "border-t border-gray-100 dark:border-gray-800 first:border-t-0",
+                              item.checked ? "bg-muted/40 dark:bg-muted/30" : "",
+                              lastTapped && lastTapped.sectionIndex === sectionIndex && lastTapped.itemIndex === itemIndex 
+                                ? "bg-muted/60 dark:bg-muted/50" : ""
+                            )}
+                            style={{ WebkitTapHighlightColor: 'transparent' }}
+                          >
                             {/* Top Row: Vehicle & Status */}
                             <div className="px-3 pt-2">
                               <div className="flex items-center justify-between gap-4">
@@ -2133,16 +2171,19 @@ export default function EquipmentChecklistPage() {
                                   <Checkbox 
                                     id={`${section.title}-${item.id}-mobile`}
                                     checked={item.checked}
-                                    onCheckedChange={(checked) => 
-                                      handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
-                                    }
+                                    onCheckedChange={(checked) => {
+                                      setLastTapped({sectionIndex, itemIndex});
+                                      setTimeout(() => setLastTapped(null), 50);
+                                      handleCheckboxChange(sectionIndex, itemIndex, checked as boolean);
+                                    }}
                                     className={cn(
-                                      "h-5 w-5 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-150",
+                                      "h-6 w-6 cursor-pointer data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground transition-colors duration-50",
                                       highlightedCheckbox && 
                                       highlightedCheckbox.sectionIndex === sectionIndex && 
                                       highlightedCheckbox.itemIndex === itemIndex ? 
-                                      "ring-2 ring-primary ring-offset-2 transition-all duration-150" : ""
+                                      "ring-2 ring-primary ring-offset-2 transition-all duration-50" : ""
                                     )}
+                                    aria-label={`Mark ${item.name} as ${item.checked ? 'unchecked' : 'checked'}`}
                                   />
                                 </div>
                               </div>
@@ -2157,7 +2198,10 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full h-7 text-xs min-h-0 py-0 px-2 transition-all duration-150">
+                                    <SelectTrigger 
+                                      className="w-full h-9 text-xs min-h-0 py-0 px-2 transition-all duration-100 active-feedback" 
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Checker" className="truncate" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2167,7 +2211,7 @@ export default function EquipmentChecklistPage() {
                                           <React.Fragment key={group}>
                                             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group}</div>
                                             {members && members.length > 0 ? members.map((checker) => (
-                                              <SelectItem key={checker} value={checker} className="text-xs py-1">
+                                              <SelectItem key={checker} value={checker} className="text-xs py-1.5">
                                                 {checker}
                                               </SelectItem>
                                             )) : (
@@ -2185,16 +2229,19 @@ export default function EquipmentChecklistPage() {
                                     value={item.status || ""}
                                     onValueChange={(value) => handleStatusChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className={cn(
-                                      "w-full h-7 text-xs min-h-0 py-0 px-2",
-                                      item.assignedTo && (item.status === "Pending" || !item.status) &&
-                                      "border-amber-400 bg-amber-50 dark:bg-amber-900/20 animate-pulse-medium"
-                                    )}>
+                                    <SelectTrigger 
+                                      className={cn(
+                                        "w-full h-9 text-xs min-h-0 py-0 px-2 transition-all duration-100 active-feedback",
+                                        item.assignedTo && (item.status === "Pending" || !item.status) &&
+                                        "border-amber-400 bg-amber-50 dark:bg-amber-900/20 animate-pulse-medium"
+                                      )}
+                                      aria-label={`Select fuel level for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Fuel Level" className="truncate" />
                                     </SelectTrigger>
                                     <SelectContent>
                                       {fuelLevels.map((level) => (
-                                        <SelectItem key={level} value={level} className="text-xs py-1">
+                                        <SelectItem key={level} value={level} className="text-xs py-1.5">
                                           {level}
                                         </SelectItem>
                                       ))}
@@ -2211,11 +2258,12 @@ export default function EquipmentChecklistPage() {
                                     onBlur={() => handleInputBlur(sectionIndex, itemIndex)}
                                     placeholder="Enter ID"
                                     className={cn(
-                                      "w-full h-7 text-xs min-h-0 py-0 px-2",
+                                      "w-full h-9 text-xs min-h-0 py-0 px-2 transition-all duration-100",
                                       item.assignedTo && !item.identifier && !localIdentifiers[`${sectionIndex}-${itemIndex}`] &&
                                       "border-amber-400 bg-amber-50 dark:bg-amber-900/20 animate-pulse-medium",
                                       animateInputs[`${sectionIndex}-${itemIndex}`] && "shadow-md scale-[1.02] border-amber-400"
                                     )}
+                                    aria-label={`Enter response ID for ${item.name}`}
                                   />
                                 </div>
                               </div>
@@ -2234,14 +2282,16 @@ export default function EquipmentChecklistPage() {
           <Button
             onClick={handleResetVehicles}
             variant="outline"
-            className="flex items-center justify-center md:justify-start w-full md:w-auto rounded-lg bg-white/50 dark:bg-transparent dark:hover:bg-neutral-800/50 backdrop-blur-sm border-neutral-200 dark:border-neutral-700"
+            className="flex items-center justify-center md:justify-start w-full md:w-auto rounded-lg bg-white/50 dark:bg-transparent dark:hover:bg-neutral-800/50 backdrop-blur-sm border-neutral-200 dark:border-neutral-700 active:scale-[0.98] transition-transform active-feedback"
+            aria-label="Reset vehicles to default values"
           >
             <span className="mr-2 text-neutral-600 dark:text-neutral-400 font-medium">Reset Vehicles</span>
           </Button>
           <Button
             onClick={handleReset}
             variant="outline"
-            className="flex items-center justify-center md:justify-start w-full md:w-auto rounded-lg bg-white/50 dark:bg-transparent dark:hover:bg-neutral-800/50 backdrop-blur-sm border-neutral-200 dark:border-neutral-700 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+            className="flex items-center justify-center md:justify-start w-full md:w-auto rounded-lg bg-white/50 dark:bg-transparent dark:hover:bg-neutral-800/50 backdrop-blur-sm border-neutral-200 dark:border-neutral-700 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 active:scale-[0.98] transition-transform active-feedback"
+            aria-label="Reset all equipment"
           >
             <span className="mr-2 text-red-600 dark:text-red-400 font-medium">Reset All Equipment</span>
           </Button>
