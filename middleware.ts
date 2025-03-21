@@ -22,5 +22,23 @@ export async function middleware(request: NextRequest) {
   )
 
   await supabase.auth.getSession()
+
+  // Only add cache headers for Supabase API requests
+  if (request.nextUrl.href.includes('supabase.co')) {
+    // Add cache-control headers
+    response.headers.set(
+      'Cache-Control',
+      'public, max-age=300, stale-while-revalidate=60'
+    )
+  }
+
   return response
+}
+
+export const config = {
+  matcher: [
+    // Match all API routes that go to Supabase
+    '/api/:path*',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
+  ],
 } 

@@ -105,14 +105,19 @@ export default function EquipmentChecklistPage() {
 
   // Add a state for reset vehicles dialog
   const [isResetVehiclesDialogOpen, setIsResetVehiclesDialogOpen] = useState(false);
+  
+  // Add state to track pending updates by field ID
+  const [pendingUpdates, setPendingUpdates] = useState<Set<string>>(new Set());
+  
+  // Add state to track item versions for conflict resolution
+  const itemVersions = useRef<Record<string, number>>({});
 
-  // Fetch personnel data from Supabase
+  // Fetch personnel data efficiently
   useEffect(() => {
     async function fetchPersonnel() {
       try {
         console.log('Fetching personnel data...');
         
-        // Fetch personnel data efficiently by selecting only needed fields
         const { data, error } = await supabase
           .from('personnel')
           .select('id, name, rank, grouping')
@@ -494,82 +499,106 @@ export default function EquipmentChecklistPage() {
   }, [supabase]);
 
   // Optimize the saveItemToDatabase function to better track what's already saved
-  const saveItemToDatabase = async (sectionTitle: string, item: ChecklistItem) => {
+  const saveItemToDatabase = useCallback(async (sectionTitle: string, item: ChecklistItem) => {
+    setIsSaving(true);
+
+    // Generate a unique key for this item update
+    const itemKey = `${sectionTitle}-${item.id}`;
+    
+    // Track version for this update
+    const currentVersion = (itemVersions.current[itemKey] || 0) + 1;
+    itemVersions.current[itemKey] = currentVersion;
+    
+    // Add to pending updates
+    setPendingUpdates(prev => {
+      const newPendingUpdates = new Set(prev);
+      newPendingUpdates.add(itemKey);
+      return newPendingUpdates;
+    });
+
+    // Store the original value for rollback in case of error
+    const originalItems = sections.find(s => s.title === sectionTitle)?.items || [];
+    const originalItem = originalItems.find(i => i.id === item.id);
+    const rollbackData = originalItem ? { ...originalItem } : null;
+
     try {
-      // Create a unique key for tracking this item
-      const itemKey = `${sectionTitle}-${item.id}`;
-      
-      // Only log in development
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`Saving item to database: ${itemKey}`);
+      // Generate SQL that properly handles null values - we need to explicitly 
+      // set assigned_to, status, and identifier to null when they should be cleared
+      const { data, error } = await supabase
+        .from('equipment_checklist')
+        .update({
+          checked: item.checked,
+          assigned_to: item.assignedTo === undefined ? null : item.assignedTo,
+          status: item.status === undefined ? null : item.status,
+          identifier: item.identifier === undefined ? null : item.identifier,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('section', sectionTitle)
+        .eq('item_id', item.id);
+
+      if (error) {
+        console.error('Error saving item:', error);
+        throw error;
       }
-      
-      // Prepare the data, explicitly setting null values for cleared fields
-      // Use snake_case field names to match database schema
-      const data = {
-        section: sectionTitle,
-        item_id: item.id,
-        name: item.name,
-        checked: item.checked,
-        assigned_to: item.assignedTo || null,
-        status: item.status || null,
-        identifier: item.identifier || null,
-      };
-      
-      // Generate a hash of current values to compare against last saved
-      const dataHash = JSON.stringify(data);
-      
-      // Skip save if this exact data was already saved (prevents duplicate saves)
-      if (lastSavedValues.current[itemKey] === dataHash) {
-        console.log(`No changes for ${itemKey}, skipping save`);
-        return;
-      }
-      
-      setIsSaving(true);
-      setSaveError(null);
-      
-      // Update item in database with debounce
-      if (saveDebouncers.current[itemKey]) {
-        clearTimeout(saveDebouncers.current[itemKey]);
-      }
-      
-      saveDebouncers.current[itemKey] = setTimeout(async () => {
-        try {
-          // Track the last processed realtime update to avoid echo effects
-          lastProcessedUpdates.current[itemKey] = dataHash;
-          
-          const { error } = await supabase
-            .from('equipment_checklist')
-            .upsert([data], {
-              onConflict: 'section,item_id',
-              ignoreDuplicates: false,
-            });
-          
-          if (error) {
-            throw error;
-          }
-          
-          // Save the hash for future comparison
-          lastSavedValues.current[itemKey] = dataHash;
-          
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`Item saved successfully: ${itemKey}`);
-          }
-        } catch (error: unknown) {
-          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-          console.error(`Error saving item ${itemKey}:`, error);
-          setSaveError(`Failed to save: ${errorMessage}`);
-        } finally {
-          setIsSaving(false);
+
+      // Check if this was the latest version when we get the response
+      if (itemVersions.current[itemKey] === currentVersion) {
+        console.log('Item saved successfully:', item.id);
+        
+        // Show a minimal toast only when performing major updates like clearing items
+        if (item.checked === false && !item.assignedTo && !item.status && !item.identifier) {
+          toast({
+            title: "Cleared",
+            description: `${sectionTitle}: ${item.name} has been cleared`,
+            duration: 2000,
+          });
         }
-      }, 300); // 300ms debounce
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('Error in saveItemToDatabase:', error);
+      }
+    } catch (error) {
+      console.error('Failed to save item:', error);
+      
+      // Only rollback if this was the latest version
+      if (itemVersions.current[itemKey] === currentVersion && rollbackData) {
+        // Rollback the state change
+        setSections(prevSections => {
+          const sectionIndex = prevSections.findIndex(s => s.title === sectionTitle);
+          if (sectionIndex === -1) return prevSections;
+          
+          const updatedSections = [...prevSections];
+          const updatedItems = [...updatedSections[sectionIndex].items];
+          const itemIndex = updatedItems.findIndex(i => i.id === item.id);
+          
+          if (itemIndex !== -1) {
+            updatedItems[itemIndex] = rollbackData;
+            updatedSections[sectionIndex] = {
+              ...updatedSections[sectionIndex],
+              items: updatedItems
+            };
+          }
+          
+          return updatedSections;
+        });
+        
+        // Show error toast
+        toast({
+          title: "Error",
+          description: "Failed to save changes. Please try again.",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      // Only remove from pending if this was the latest version
+      if (itemVersions.current[itemKey] === currentVersion) {
+        setPendingUpdates(prev => {
+          const newPendingUpdates = new Set(prev);
+          newPendingUpdates.delete(itemKey);
+          return newPendingUpdates;
+        });
+      }
+      
       setIsSaving(false);
-      setSaveError(`Unexpected error: ${errorMessage}`);
     }
-  };
+  }, [sections, supabase, toast]);
 
   // Optimize the fetchEquipmentData function
   const fetchEquipmentData = async () => {
@@ -577,13 +606,11 @@ export default function EquipmentChecklistPage() {
       setFetchError(null);
       console.log('Fetching equipment checklist data...');
       
-      // Use a single query to get all the data at once with specific filters
-      // Fix column names to use snake_case instead of camelCase
       const { data, error } = await supabase
         .from('equipment_checklist')
         .select('section, item_id, name, checked, assigned_to, status, identifier')
         .order('item_id');
-        
+      
       if (error) {
         console.error('Error fetching equipment checklist data:', error);
         setFetchError('Failed to load checklist data.');
@@ -665,34 +692,27 @@ export default function EquipmentChecklistPage() {
         const itemKey = `${newRecord?.section || oldRecord?.section}-${newRecord?.item_id || oldRecord?.item_id}`;
         const payloadHash = JSON.stringify(newRecord);
         
-        // Skip if this is an echo of our own update
+        // Skip if this is an echo of our own update that we're still processing
+        if (pendingUpdates.has(itemKey)) {
+          console.log(`Skipping event for ${itemKey} - update is still pending`);
+          return;
+        }
+        
+        // Skip if the user is currently editing this field
+        if (activeEditingFields.has(itemKey)) {
+          console.log(`Skipping event for ${itemKey} - user is currently editing`);
+          return;
+        }
+        
+        // Skip if this is an echo of our own update we already processed
         if (lastProcessedUpdates.current[itemKey] === payloadHash) {
           console.log(`Skipping event for ${itemKey} - matches our last update`);
           return;
         }
         
-        // Track events by type to avoid duplicates
-        const lastProcessedEvents: Record<string, Record<string, string>> = {
-          INSERT: {},
-          UPDATE: {},
-          DELETE: {}
-        };
-        
-        // Skip duplicate events (can happen with multiple clients)
-        if (lastProcessedEvents[eventType]?.[itemKey] === payloadHash) {
-          console.log(`Skipping duplicate ${eventType} event for ${itemKey}`);
-          return;
-        }
-        
-        // Update tracking
-        if (!lastProcessedEvents[eventType]) {
-          lastProcessedEvents[eventType] = {};
-        }
-        lastProcessedEvents[eventType][itemKey] = payloadHash;
-        
         console.log(`Real-time update received (${eventType}):`, payload);
         
-        // For small changes, consider updating state directly instead of refetching
+        // For small changes, update state directly instead of refetching
         if (eventType === 'UPDATE' && newRecord) {
           // Update the state directly for the specific item
           setSections(prevSections => {
@@ -731,6 +751,34 @@ export default function EquipmentChecklistPage() {
               items: updatedItems
             };
             
+            // Add a brief animation to the item that was updated remotely
+            if (updatedItem.checked !== currentItem.checked) {
+              setHighlightedCheckbox({ sectionIndex, itemIndex });
+              requestAnimationFrame(() => {
+                setTimeout(() => {
+                  setHighlightedCheckbox(null);
+                }, 800);
+              });
+            }
+            
+            // If the identifier or status changed, add a brief animation to that field
+            if (
+              updatedItem.identifier !== currentItem.identifier || 
+              updatedItem.status !== currentItem.status
+            ) {
+              setAnimateInputs(prev => ({
+                ...prev,
+                [`${sectionIndex}-${itemIndex}`]: true
+              }));
+              
+              setTimeout(() => {
+                setAnimateInputs(prev => ({
+                  ...prev,
+                  [`${sectionIndex}-${itemIndex}`]: false
+                }));
+              }, 800);
+            }
+            
             console.log('Directly updating state for item:', itemKey);
             return updatedSections;
           });
@@ -755,7 +803,7 @@ export default function EquipmentChecklistPage() {
     
     console.log('Channel setup completed:', channel);
     return channel;
-  }, [supabase, fetchEquipmentData]);
+  }, [supabase, fetchEquipmentData, activeEditingFields, pendingUpdates, setHighlightedCheckbox, setAnimateInputs]);
 
   // Set up real-time subscription for equipment_checklist with improved initialization
   useEffect(() => {
@@ -854,32 +902,39 @@ export default function EquipmentChecklistPage() {
     fetchEquipmentData();
   }, [fetchEquipmentData]);
 
-  const handleCheckboxChange = (sectionIndex: number, itemIndex: number, checked: boolean) => {
+  const handleCheckboxChange = useCallback((sectionIndex: number, itemIndex: number, checked: boolean) => {
+    // Skip if already saving to prevent duplicate updates
+    if (isSaving) return;
+    
     const currentItem = sections[sectionIndex].items[itemIndex];
+    
+    // Skip if state isn't actually changing
+    if (currentItem.checked === checked) return;
+
+    // Create a unique key for this item
+    const itemKey = `${sections[sectionIndex].title}-${currentItem.id}`;
+    
+    // Skip if this item is already being updated
+    if (pendingUpdates.has(itemKey)) return;
     
     // Create a new item with updated checked status
     const updatedItem = {
       ...currentItem,
       checked
     };
+
+    // Track this update to prevent echo effects
+    lastProcessedUpdates.current[itemKey] = JSON.stringify({
+      section: sections[sectionIndex].title,
+      item_id: currentItem.id,
+      checked
+    });
     
-    // If checking the box, show highlight animation
-    if (checked) {
-      setHighlightedCheckbox({ sectionIndex, itemIndex });
-      // Remove highlight after animation
-      setTimeout(() => {
-        setHighlightedCheckbox(null);
-      }, 300); // Reduced from 650ms to 300ms for faster feedback
-    }
-    
-    // Use a more targeted state update approach
+    // Update state immediately for better responsiveness
     setSections(prevSections => {
       const updatedSections = [...prevSections];
-      // Create a new items array for just the affected section
       const updatedItems = [...updatedSections[sectionIndex].items];
-      // Update only the specific item
       updatedItems[itemIndex] = updatedItem;
-      // Update the section with the new items array
       updatedSections[sectionIndex] = {
         ...updatedSections[sectionIndex],
         items: updatedItems
@@ -887,12 +942,22 @@ export default function EquipmentChecklistPage() {
       return updatedSections;
     });
     
-    // Save to database
+    // Show brief highlight animation when checking
+    if (checked) {
+      setHighlightedCheckbox({ sectionIndex, itemIndex });
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          setHighlightedCheckbox(null);
+        }, 600); // Increased from 50 to 600ms for better visibility
+      });
+    }
+    
+    // Save to database immediately, saveItemToDatabase will handle pending state
     saveItemToDatabase(
       sections[sectionIndex].title,
       updatedItem
     );
-  };
+  }, [sections, isSaving, saveItemToDatabase, pendingUpdates]);
 
   const handleCheckerChange = (sectionIndex: number, itemIndex: number, checker: string) => {
     const key = `${sectionIndex}-${itemIndex}`;
@@ -912,62 +977,13 @@ export default function EquipmentChecklistPage() {
       if (!updatedItem.status) {
         updatedItem.status = "Pending";
       }
-      
-      // Highlight the identifier field to indicate it needs to be filled
-      if (!updatedItem.identifier) {
-        // Set typing indicator for the identifier field
-        setIsTyping({ sectionIndex, itemIndex });
-        
-        // Clear typing indicator after 3 seconds
-        setTimeout(() => {
-          // Only clear if it's still the same item being highlighted
-          if (isTyping && 
-              isTyping.sectionIndex === sectionIndex && 
-              isTyping.itemIndex === itemIndex) {
-            setIsTyping(null);
-          }
-        }, 3000);
-        
-        // Set animation state for this input
-        setAnimateInputs(prev => ({
-          ...prev,
-          [key]: true
-        }));
-        
-        // Focus the response ID input field after a short delay
-        setTimeout(() => {
-          const inputRef = inputRefs.current[key];
-          if (inputRef) {
-            inputRef.focus();
-          }
-        }, 100);
-        
-        // Clear animation after a delay
-        setTimeout(() => {
-          setAnimateInputs(prev => ({
-            ...prev,
-            [key]: false
-          }));
-        }, 2000);
-      }
-    }
-    
-    // Highlight the checkbox briefly
-    if (checker) {
-      setHighlightedCheckbox({ sectionIndex, itemIndex });
-      setTimeout(() => {
-        setHighlightedCheckbox(null);
-      }, 1500); // Remove highlight after 1.5 seconds
     }
     
     // Use a more targeted state update approach
     setSections(prevSections => {
       const updatedSections = [...prevSections];
-      // Create a new items array for just the affected section
       const updatedItems = [...updatedSections[sectionIndex].items];
-      // Update only the specific item
       updatedItems[itemIndex] = updatedItem;
-      // Update the section with the new items array
       updatedSections[sectionIndex] = {
         ...updatedSections[sectionIndex],
         items: updatedItems
@@ -980,6 +996,116 @@ export default function EquipmentChecklistPage() {
       sections[sectionIndex].title,
       updatedItem
     );
+  };
+
+  const handleStatusChange = (sectionIndex: number, itemIndex: number, status: string) => {
+    const currentItem = sections[sectionIndex].items[itemIndex];
+    
+    // Create a new item with updated status
+    const updatedItem = {
+      ...currentItem,
+      status
+    };
+    
+    // Use a more targeted state update approach
+    setSections(prevSections => {
+      const updatedSections = [...prevSections];
+      const updatedItems = [...updatedSections[sectionIndex].items];
+      updatedItems[itemIndex] = updatedItem;
+      updatedSections[sectionIndex] = {
+        ...updatedSections[sectionIndex],
+        items: updatedItems
+      };
+      return updatedSections;
+    });
+    
+    // Save to database
+    saveItemToDatabase(
+      sections[sectionIndex].title,
+      updatedItem
+    );
+  };
+
+  const handleClearItem = (sectionIndex: number, itemIndex: number) => {
+    const currentItem = sections[sectionIndex].items[itemIndex];
+    const key = `${sectionIndex}-${itemIndex}`;
+    
+    // Skip if item is already cleared
+    if (!currentItem.checked && !currentItem.assignedTo && !currentItem.status && !currentItem.identifier) {
+      return;
+    }
+    
+    // Create a new cleared item with default values
+    const clearedItem = {
+      ...currentItem,
+      checked: false,
+      assignedTo: undefined,
+      status: undefined,
+      identifier: undefined
+    };
+    
+    // Clear the local identifier state
+    setLocalIdentifiers(prev => {
+      const newState = { ...prev };
+      delete newState[key];
+      return newState;
+    });
+    
+    // Use a more targeted state update approach
+    setSections(prevSections => {
+      const updatedSections = [...prevSections];
+      const updatedItems = [...updatedSections[sectionIndex].items];
+      updatedItems[itemIndex] = clearedItem;
+      updatedSections[sectionIndex] = {
+        ...updatedSections[sectionIndex],
+        items: updatedItems
+      };
+      return updatedSections;
+    });
+    
+    console.log('Clearing item:', sections[sectionIndex].title, currentItem.id);
+    
+    // Save to database using the clearedItem
+    // The saveItemToDatabase function will convert undefined to null
+    saveItemToDatabase(
+      sections[sectionIndex].title,
+      clearedItem
+    );
+  };
+
+  const isVehicleSection = (title: string) => {
+    return title === "VEHICLE FPT" || title === "VEHICLE LPT";
+  };
+
+  const handleRefresh = async () => {
+    try {
+      await fetchEquipmentData();
+    } catch (error) {
+      console.error('Error refreshing equipment checklist:', error);
+      setSaveError('An unexpected error occurred while refreshing');
+    }
+  };
+
+  const handleEditItem = (sectionIndex: number, itemIndex: number) => {
+    const item = sections[sectionIndex].items[itemIndex];
+    const isVehicle = isVehicleSection(sections[sectionIndex].title);
+    
+    if (isVehicle) {
+      const [name, plateNumber] = item.name.split(' (');
+      setEditingVehicle({
+        sectionIndex,
+        itemIndex,
+        name,
+        plateNumber: plateNumber.replace(')', '')
+      });
+    } else {
+      setEditingVehicle({
+        sectionIndex,
+        itemIndex,
+        name: item.name
+      });
+    }
+    setIsEditVehicleDialogOpen(true);
   };
 
   const handleIdentifierChange = useCallback((sectionIndex: number, itemIndex: number, identifier: string) => {
@@ -1018,11 +1144,8 @@ export default function EquipmentChecklistPage() {
       // Use a more targeted state update approach
       setSections(prevSections => {
         const updatedSections = [...prevSections];
-        // Create a new items array for just the affected section
         const updatedItems = [...updatedSections[sectionIndex].items];
-        // Update only the specific item
         updatedItems[itemIndex] = updatedItem;
-        // Update the section with the new items array
         updatedSections[sectionIndex] = {
           ...updatedSections[sectionIndex],
           items: updatedItems
@@ -1049,7 +1172,7 @@ export default function EquipmentChecklistPage() {
         newSet.delete(key);
         return newSet;
       });
-    }, 300); // Reduced debounce to 300ms for smoother typing experience
+    }, 300);
     
     // Add to pending saves
     setPendingSaves(prev => ({
@@ -1058,7 +1181,6 @@ export default function EquipmentChecklistPage() {
     }));
   }, [sections, activeEditingFields, pendingSaves]);
 
-  // Add a function to handle input blur events
   const handleInputBlur = (sectionIndex: number, itemIndex: number) => {
     const key = `${sectionIndex}-${itemIndex}`;
     const identifier = localIdentifiers[key];
@@ -1087,11 +1209,8 @@ export default function EquipmentChecklistPage() {
         // Use a more targeted state update approach
         setSections(prevSections => {
           const updatedSections = [...prevSections];
-          // Create a new items array for just the affected section
           const updatedItems = [...updatedSections[sectionIndex].items];
-          // Update only the specific item
           updatedItems[itemIndex] = updatedItem;
-          // Update the section with the new items array
           updatedSections[sectionIndex] = {
             ...updatedSections[sectionIndex],
             items: updatedItems
@@ -1115,135 +1234,13 @@ export default function EquipmentChecklistPage() {
     });
   };
 
-  // Add CSS transition to input field
-  const inputStyle = "transition: border-color 0.3s ease-in-out;";
-
-  // Clean up all pending save timers on unmount
-  useEffect(() => {
-    return () => {
-      // Clear debounce timer
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-      
-      // Clear all pending save timers
-      Object.values(pendingSaves).forEach(timeoutId => {
-        clearTimeout(timeoutId);
-      });
-    };
-  }, [pendingSaves]);
-
-  const handleClearItem = (sectionIndex: number, itemIndex: number) => {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`Clearing item: section ${sectionIndex}, item ${itemIndex}`);
-    }
-    
-    const currentItem = sections[sectionIndex].items[itemIndex];
-    const key = `${sectionIndex}-${itemIndex}`;
-    
-    // Skip if item is already cleared
-    if (!currentItem.checked && !currentItem.assignedTo && !currentItem.status && !currentItem.identifier) {
-      console.log(`Item already cleared: section ${sectionIndex}, item ${itemIndex}`);
-      return;
-    }
-    
-    // Create a new cleared item with default values
-    const clearedItem = {
-      ...currentItem,
-      checked: false,
-      assignedTo: undefined,
-      status: undefined,
-      identifier: undefined
-    };
-    
-    // Use a more targeted state update approach
-    setSections(prevSections => {
-      const updatedSections = [...prevSections];
-      // Create a new items array for just the affected section
-      const updatedItems = [...updatedSections[sectionIndex].items];
-      // Update only the specific item
-      updatedItems[itemIndex] = clearedItem;
-      // Update the section with the new items array
-      updatedSections[sectionIndex] = {
-        ...updatedSections[sectionIndex],
-        items: updatedItems
-      };
-      return updatedSections;
-    });
-    
-    // Clear local identifier state
-    setLocalIdentifiers(prev => {
-      const newState = { ...prev };
-      delete newState[key];
-      return newState;
-    });
-    
-    // Clear any pending saves
-    if (pendingSaves[key]) {
-      clearTimeout(pendingSaves[key]);
-      setPendingSaves(prev => {
-        const newState = { ...prev };
-        delete newState[key];
-        return newState;
-      });
-    }
-    
-    // Remove from active editing fields
-    setActiveEditingFields(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(key);
-      return newSet;
-    });
-    
-    // Clear typing indicator if it was showing for this item
-    if (isTyping && 
-        isTyping.sectionIndex === sectionIndex && 
-        isTyping.itemIndex === itemIndex) {
-      setIsTyping(null);
-    }
-    
-    // Save to database with explicit null values - use a unique key to prevent echo effects
-    const itemKey = `${sections[sectionIndex].title}-${currentItem.id}`;
-    lastProcessedUpdates.current[itemKey] = JSON.stringify({
-      section: sections[sectionIndex].title,
-      item_id: currentItem.id,
-      name: currentItem.name,
-      checked: false,
-      assigned_to: null,
-      status: null,
-      identifier: null
-    });
-    
-    // Save to database
-    saveItemToDatabase(
-      sections[sectionIndex].title,
-      clearedItem
-    );
-  };
-
-  const isVehicleSection = (title: string) => {
-    return title === "VEHICLE FPT" || title === "VEHICLE LPT";
-  };
-
-  // Add a handler for the refresh button
-  const handleRefresh = async () => {
-    try {
-      console.log('Manually refreshing equipment checklist data...');
-      await fetchEquipmentData();
-    } catch (error) {
-      console.error('Error refreshing equipment checklist:', error);
-      setSaveError('An unexpected error occurred while refreshing');
-    }
-  };
-
-  // Add a function to reset vehicle entries to default values
   const handleResetVehicles = async () => {
     try {
       setIsSaving(true);
       setSaveError(null);
       setIsResetVehiclesDialogOpen(false);
 
-      // Default vehicle data for FPT section
+      // Default vehicle data
       const defaultVehiclesFPT = [
         { id: 1, name: "CFS FRC (QX1859E)" },
         { id: 2, name: "Class 4 Truck (YN4304C)" },
@@ -1253,7 +1250,6 @@ export default function EquipmentChecklistPage() {
         { id: 6, name: "Spare LF (GBF8661J)" }
       ];
 
-      // Default vehicle data for LPT section
       const defaultVehiclesLPT = [
         { id: 1, name: "CFS FRC (QX1859E)" },
         { id: 2, name: "Class 4 Truck (YN4304C)" },
@@ -1263,56 +1259,21 @@ export default function EquipmentChecklistPage() {
         { id: 6, name: "Spare LF (GBD7755P)" }
       ];
 
-      // Fetch current data to preserve other fields
-      const { data: currentData, error: fetchError } = await supabase
-        .from('equipment_checklist')
-        .select('*')
-        .or('section.eq.VEHICLE FPT,section.eq.VEHICLE LPT');
-
-      if (fetchError) {
-        throw fetchError;
-      }
-
-      // Update FPT vehicles
+      // Update vehicles in both sections
       for (const vehicle of defaultVehiclesFPT) {
-        // Find current item data to preserve other fields
-        const currentItem = currentData?.find(
-          item => item.section === 'VEHICLE FPT' && item.item_id === vehicle.id
-        );
-
-        // Only update the name field, keep all other fields intact
-        if (currentItem) {
-          await supabase
-            .from('equipment_checklist')
-            .update({ 
-              name: vehicle.name,
-              // Explicitly set the updated_at field
-              updated_at: new Date().toISOString()
-            })
-            .eq('section', 'VEHICLE FPT')
-            .eq('item_id', vehicle.id);
-        }
+        await supabase
+          .from('equipment_checklist')
+          .update({ name: vehicle.name })
+          .eq('section', 'VEHICLE FPT')
+          .eq('item_id', vehicle.id);
       }
 
-      // Update LPT vehicles
       for (const vehicle of defaultVehiclesLPT) {
-        // Find current item data to preserve other fields
-        const currentItem = currentData?.find(
-          item => item.section === 'VEHICLE LPT' && item.item_id === vehicle.id
-        );
-
-        // Only update the name field, keep all other fields intact
-        if (currentItem) {
-          await supabase
-            .from('equipment_checklist')
-            .update({ 
-              name: vehicle.name,
-              // Explicitly set the updated_at field
-              updated_at: new Date().toISOString()
-            })
-            .eq('section', 'VEHICLE LPT')
-            .eq('item_id', vehicle.id);
-        }
+        await supabase
+          .from('equipment_checklist')
+          .update({ name: vehicle.name })
+          .eq('section', 'VEHICLE LPT')
+          .eq('item_id', vehicle.id);
       }
 
       // Refresh data
@@ -1320,7 +1281,7 @@ export default function EquipmentChecklistPage() {
 
       toast({
         title: "Success",
-        description: "Vehicle entries have been reset to their default values. Existing assignments and status information has been preserved.",
+        description: "Vehicle entries have been reset to their default values.",
       });
     } catch (error) {
       console.error('Error resetting vehicle entries:', error);
@@ -1376,70 +1337,38 @@ export default function EquipmentChecklistPage() {
     }
   };
 
-  // Add debug logging with useEffect
-  useEffect(() => {
-    console.log('Sections state updated:', sections);
-    console.log('Vehicle FPT items:', sections.find(s => s.title === "VEHICLE FPT")?.items);
-    console.log('Vehicle LPT items:', sections.find(s => s.title === "VEHICLE LPT")?.items);
-  }, [sections]);
-
-  // Add function to handle vehicle name editing
-  const handleEditVehicle = (sectionIndex: number, itemIndex: number) => {
-    const item = sections[sectionIndex].items[itemIndex];
-    const [name, plateNumber] = item.name.split(' (');
-    setEditingVehicle({
-      sectionIndex,
-      itemIndex,
-      name,
-      plateNumber: plateNumber.replace(')', '')
-    });
-    setIsEditVehicleDialogOpen(true);
-  };
-
-  // Add function to save vehicle name changes
   const handleSaveVehicle = async () => {
     if (!editingVehicle) return;
 
     const { sectionIndex, itemIndex, name, plateNumber } = editingVehicle;
     const section = sections[sectionIndex];
     const item = section.items[itemIndex];
-    const isVehicleSection = section.title === "VEHICLE FPT" || section.title === "VEHICLE LPT";
-    const newName = isVehicleSection ? `${name} (${plateNumber})` : name;
+    const isVehicle = isVehicleSection(section.title);
+    const newName = isVehicle ? `${name} (${plateNumber})` : name;
 
     try {
       setIsSaving(true);
       
       // For vehicle sections, update both FPT and LPT
-      if (isVehicleSection) {
-        interface VehicleUpdate {
-          section: string;
-          item_id: number;
-          name: string;
-        }
+      if (isVehicle) {
+        const updates = [
+          {
+            section: section.title,
+            item_id: item.id,
+            name: newName
+          }
+        ];
         
-        const updates: VehicleUpdate[] = [];
-        
-        // Get the current item's ID
-        const currentItemId = item.id;
-        
-        // Find ONLY the corresponding entry in the other section with the same item_id
+        // Find corresponding entry in other section
         const otherSectionTitle = section.title === "VEHICLE FPT" ? "VEHICLE LPT" : "VEHICLE FPT";
         const otherSection = sections.find(s => s.title === otherSectionTitle);
         
-        // Add the current item to updates
-        updates.push({
-          section: section.title,
-          item_id: currentItemId,
-          name: newName
-        });
-        
-        // If we found a corresponding entry in the other section with the same item_id, add it too
         if (otherSection) {
-          const correspondingItem = otherSection.items.find(i => i.id === currentItemId);
+          const correspondingItem = otherSection.items.find(i => i.id === item.id);
           if (correspondingItem) {
             updates.push({
               section: otherSectionTitle,
-              item_id: currentItemId,
+              item_id: item.id,
               name: newName
             });
           }
@@ -1447,52 +1376,46 @@ export default function EquipmentChecklistPage() {
 
         // Update all matching entries
         for (const update of updates) {
-          const { error } = await supabase
+          await supabase
             .from('equipment_checklist')
-            .update({
-              name: update.name,
-              updated_at: new Date().toISOString()
-            })
+            .update({ name: update.name })
             .eq('section', update.section)
             .eq('item_id', update.item_id);
-
-          if (error) throw error;
         }
 
         // Update local state
-        const newSections = [...sections];
-        updates.forEach(update => {
-          const sectionIndex = newSections.findIndex(s => s.title === update.section);
-          if (sectionIndex !== -1) {
-            const itemIndex = newSections[sectionIndex].items.findIndex(i => i.id === update.item_id);
-            if (itemIndex !== -1) {
-              newSections[sectionIndex].items[itemIndex].name = update.name;
+        setSections(prevSections => {
+          const newSections = [...prevSections];
+          updates.forEach(update => {
+            const sectionIndex = newSections.findIndex(s => s.title === update.section);
+            if (sectionIndex !== -1) {
+              const itemIndex = newSections[sectionIndex].items.findIndex(i => i.id === update.item_id);
+              if (itemIndex !== -1) {
+                newSections[sectionIndex].items[itemIndex].name = update.name;
+              }
             }
-          }
+          });
+          return newSections;
         });
-        setSections(newSections);
 
         toast({
           title: "Success",
           description: `Vehicle updated successfully in ${updates.length} section${updates.length > 1 ? 's' : ''}`,
         });
       } else {
-        // For non-vehicle sections (Armoury and BWC), just update the single item
-        const { error } = await supabase
+        // For non-vehicle sections, just update the single item
+        await supabase
           .from('equipment_checklist')
-          .update({
-            name: newName,
-            updated_at: new Date().toISOString()
-          })
+          .update({ name: newName })
           .eq('section', section.title)
           .eq('item_id', item.id);
 
-        if (error) throw error;
-
         // Update local state
-        const newSections = [...sections];
-        newSections[sectionIndex].items[itemIndex].name = newName;
-        setSections(newSections);
+        setSections(prevSections => {
+          const newSections = [...prevSections];
+          newSections[sectionIndex].items[itemIndex].name = newName;
+          return newSections;
+        });
 
         toast({
           title: "Success",
@@ -1514,60 +1437,13 @@ export default function EquipmentChecklistPage() {
     }
   };
 
-  // Add function to handle editing any item
-  const handleEditItem = (sectionIndex: number, itemIndex: number) => {
-    const item = sections[sectionIndex].items[itemIndex];
-    const isVehicleSection = sections[sectionIndex].title === "VEHICLE FPT" || sections[sectionIndex].title === "VEHICLE LPT";
+  // First, let's add a utility function for checking if a field is pending update
+  const isItemPending = useCallback((sectionIndex: number, itemIndex: number) => {
+    if (!sections[sectionIndex] || !sections[sectionIndex].items[itemIndex]) return false;
     
-    if (isVehicleSection) {
-      const [name, plateNumber] = item.name.split(' (');
-      setEditingVehicle({
-        sectionIndex,
-        itemIndex,
-        name,
-        plateNumber: plateNumber.replace(')', '')
-      });
-    } else {
-      setEditingVehicle({
-        sectionIndex,
-        itemIndex,
-        name: item.name
-      });
-    }
-    setIsEditVehicleDialogOpen(true);
-  };
-
-  // Restore the handleStatusChange function
-  const handleStatusChange = (sectionIndex: number, itemIndex: number, status: string) => {
-    const currentItem = sections[sectionIndex].items[itemIndex];
-    
-    // Create a new item with updated status
-    const updatedItem = {
-      ...currentItem,
-      status
-    };
-    
-    // Use a more targeted state update approach
-    setSections(prevSections => {
-      const updatedSections = [...prevSections];
-      // Create a new items array for just the affected section
-      const updatedItems = [...updatedSections[sectionIndex].items];
-      // Update only the specific item
-      updatedItems[itemIndex] = updatedItem;
-      // Update the section with the new items array
-      updatedSections[sectionIndex] = {
-        ...updatedSections[sectionIndex],
-        items: updatedItems
-      };
-      return updatedSections;
-    });
-    
-    // Save to database
-    saveItemToDatabase(
-      sections[sectionIndex].title,
-      updatedItem
-    );
-  };
+    const itemKey = `${sections[sectionIndex].title}-${sections[sectionIndex].items[itemIndex].id}`;
+    return pendingUpdates.has(itemKey);
+  }, [sections, pendingUpdates]);
 
   return (
     <div className="container mx-auto py-3 sm:py-6 px-3 sm:px-6">
@@ -1746,12 +1622,14 @@ export default function EquipmentChecklistPage() {
                                       "hover:scale-105",
                                       "active:scale-95",
                                       "transform-gpu",
+                                      isItemPending(sectionIndex, itemIndex) ? "opacity-60 after:absolute after:inset-0 after:animate-pulse" : "",
                                       highlightedCheckbox && 
                                       highlightedCheckbox.sectionIndex === sectionIndex && 
                                       highlightedCheckbox.itemIndex === itemIndex ? 
                                       "ring-2 ring-primary ring-offset-2 animate-pulse" : ""
                                     )}
                                     aria-label={`Mark ${item.name} as checked`}
+                                    disabled={isItemPending(sectionIndex, itemIndex)}
                                   />
                                   {item.required && !item.checked && (
                                     <span className="ml-1 text-red-500 animate-pulse-medium">*</span>
@@ -1766,7 +1644,10 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full">
+                                    <SelectTrigger 
+                                      className="w-full h-10 text-xs transition-all duration-150 border"
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Select checker" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1815,7 +1696,10 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full">
+                                    <SelectTrigger 
+                                      className="w-full h-10 text-xs transition-all duration-150 border"
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Select checker" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1883,6 +1767,7 @@ export default function EquipmentChecklistPage() {
                                       className={cn(
                                         "w-full transition-all duration-150 border text-xs h-10 px-3",
                                         "focus:border-amber-300 focus:ring-amber-500",
+                                        isItemPending(sectionIndex, itemIndex) ? "bg-blue-50/20 border-blue-300 dark:bg-blue-900/10" : "",
                                         item.assignedTo && !item.identifier && !localIdentifiers[`${sectionIndex}-${itemIndex}`]
                                           ? "border-amber-400 bg-amber-50 dark:bg-amber-900/20 animate-pulse-medium" 
                                           : "",
@@ -1892,7 +1777,13 @@ export default function EquipmentChecklistPage() {
                                       )}
                                       aria-label="Response ID input"
                                       tabIndex={0}
+                                      disabled={isItemPending(sectionIndex, itemIndex)}
                                     />
+                                    {isItemPending(sectionIndex, itemIndex) && (
+                                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                                        <div className="w-3 h-3 rounded-full bg-blue-400 opacity-75 animate-pulse"></div>
+                                      </div>
+                                    )}
                                     {item.required && !item.identifier && !localIdentifiers[`${sectionIndex}-${itemIndex}`] ? (
                                       <span className="ml-1 text-red-500 animate-pulse-medium">*</span>
                                     ) : null}
@@ -1917,7 +1808,10 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full">
+                                    <SelectTrigger 
+                                      className="w-full h-10 text-xs transition-all duration-150 border"
+                                      aria-label={`Select personnel for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Select personnel" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1960,7 +1854,7 @@ export default function EquipmentChecklistPage() {
                 </div>
 
                 {/* Mobile View */}
-                <div className="md:hidden">
+                <div className="md:hidden touch-manipulation">
                   {section.title === "ARMOURY" && (
                     <div className="border-t border-gray-200 dark:border-gray-800">
                       <div className="grid grid-cols-12 px-3 py-1.5 bg-gray-50 dark:bg-neutral-800/50 text-[10px] font-medium text-muted-foreground">
@@ -1991,8 +1885,11 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full h-7 text-xs min-h-0 py-0 px-2 transition-all duration-150">
-                                      <SelectValue placeholder="Select checker" className="truncate" />
+                                    <SelectTrigger 
+                                      className="w-full h-7 text-xs min-h-0 py-0 px-2"
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
+                                      <SelectValue placeholder="Select checker" />
                                     </SelectTrigger>
                                     <SelectContent>
                                       {Object.entries(personnelGroups)
@@ -2019,26 +1916,13 @@ export default function EquipmentChecklistPage() {
                                   </Select>
                                 </div>
                                 <div className="col-span-2 flex justify-center">
-                                  <div className="relative flex items-center justify-center w-full h-full">
-                                    <Checkbox 
-                                      id={`${section.title}-${item.id}-mobile`}
-                                      checked={item.checked}
-                                      onCheckedChange={(checked) => 
-                                        handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
-                                      }
-                                      className={cn(
-                                        "h-5 w-5 cursor-pointer",
-                                        "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
-                                        "transform-gpu will-change-transform",
-                                        "transition-[background-color,border-color,transform] duration-50 ease-out",
-                                        "active:scale-95",
-                                        highlightedCheckbox && 
-                                        highlightedCheckbox.sectionIndex === sectionIndex && 
-                                        highlightedCheckbox.itemIndex === itemIndex ? 
-                                        "ring-2 ring-primary ring-offset-2" : ""
-                                      )}
-                                    />
-                                  </div>
+                                  <Checkbox 
+                                    id={`${section.title}-${item.id}-mobile`}
+                                    checked={item.checked}
+                                    onCheckedChange={(checked) => 
+                                      handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
+                                    }
+                                  />
                                 </div>
                               </div>
                             </div>
@@ -2078,7 +1962,10 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full h-7 text-xs min-h-0 py-0 px-2 transition-all duration-150">
+                                    <SelectTrigger 
+                                      className="w-full h-7 text-xs min-h-0 py-0 px-2"
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Assigned To" className="truncate" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2101,26 +1988,13 @@ export default function EquipmentChecklistPage() {
                                   </Select>
                                 </div>
                                 <div className="col-span-2 flex justify-center">
-                                  <div className="relative flex items-center justify-center w-full h-full">
-                                    <Checkbox 
-                                      id={`${section.title}-${item.id}-mobile`}
-                                      checked={item.checked}
-                                      onCheckedChange={(checked) => 
-                                        handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
-                                      }
-                                      className={cn(
-                                        "h-5 w-5 cursor-pointer",
-                                        "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
-                                        "transform-gpu will-change-transform",
-                                        "transition-[background-color,border-color,transform] duration-50 ease-out",
-                                        "active:scale-95",
-                                        highlightedCheckbox && 
-                                        highlightedCheckbox.sectionIndex === sectionIndex && 
-                                        highlightedCheckbox.itemIndex === itemIndex ? 
-                                        "ring-2 ring-primary ring-offset-2" : ""
-                                      )}
-                                    />
-                                  </div>
+                                  <Checkbox 
+                                    id={`${section.title}-${item.id}-mobile`}
+                                    checked={item.checked}
+                                    onCheckedChange={(checked) => 
+                                      handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
+                                    }
+                                  />
                                 </div>
                               </div>
                             </div>
@@ -2152,7 +2026,28 @@ export default function EquipmentChecklistPage() {
                                   </div>
                                 </div>
                                 <div className="col-span-2 flex justify-center">
-                                  <Checkbox />
+                                  <Checkbox 
+                                    id={`${section.title}-${item.id}-mobile`}
+                                    checked={item.checked}
+                                    onCheckedChange={(checked) => 
+                                      handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
+                                    }
+                                    className={cn(
+                                      "h-5 w-5 cursor-pointer",
+                                      "data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+                                      "transition-all duration-100 ease-in-out",
+                                      "hover:scale-105",
+                                      "active:scale-95",
+                                      "transform-gpu",
+                                      isItemPending(sectionIndex, itemIndex) ? "opacity-60 after:absolute after:inset-0 after:animate-pulse" : "",
+                                      highlightedCheckbox && 
+                                      highlightedCheckbox.sectionIndex === sectionIndex && 
+                                      highlightedCheckbox.itemIndex === itemIndex ? 
+                                      "ring-2 ring-primary ring-offset-2 animate-pulse" : ""
+                                    )}
+                                    aria-label={`Mark ${item.name} as checked`}
+                                    disabled={isItemPending(sectionIndex, itemIndex)}
+                                  />
                                 </div>
                               </div>
                             </div>
@@ -2166,7 +2061,10 @@ export default function EquipmentChecklistPage() {
                                     value={item.assignedTo || ""}
                                     onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                   >
-                                    <SelectTrigger className="w-full h-7 text-xs min-h-0 py-0 px-2 transition-all duration-150">
+                                    <SelectTrigger 
+                                      className="w-full h-7 text-xs min-h-0 py-0 px-2" 
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
                                       <SelectValue placeholder="Checker" className="truncate" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -2241,14 +2139,14 @@ export default function EquipmentChecklistPage() {
         </div>
         <div className="flex flex-col md:flex-row gap-4 px-4 pb-4 pt-0 md:px-0">
           <Button
-            onClick={handleResetVehicles}
+            onClick={() => setIsResetVehiclesDialogOpen(true)}
             variant="outline"
             className="flex items-center justify-center md:justify-start w-full md:w-auto rounded-lg bg-white/50 dark:bg-transparent dark:hover:bg-neutral-800/50 backdrop-blur-sm border-neutral-200 dark:border-neutral-700"
           >
             <span className="mr-2 text-neutral-600 dark:text-neutral-400 font-medium">Reset Vehicles</span>
           </Button>
           <Button
-            onClick={handleReset}
+            onClick={() => setIsResetDialogOpen(true)}
             variant="outline"
             className="flex items-center justify-center md:justify-start w-full md:w-auto rounded-lg bg-white/50 dark:bg-transparent dark:hover:bg-neutral-800/50 backdrop-blur-sm border-neutral-200 dark:border-neutral-700 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
           >
@@ -2258,27 +2156,27 @@ export default function EquipmentChecklistPage() {
 
         {/* Reset Vehicles Confirmation Dialog */}
         <Dialog open={isResetVehiclesDialogOpen} onOpenChange={setIsResetVehiclesDialogOpen}>
-          <DialogContent className="max-w-[90%] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Reset Vehicle Entries</DialogTitle>
-              <DialogDescription>
+          <DialogContent className="max-w-[90%] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-base sm:text-lg">Reset Vehicle Entries</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
                 This will reset all vehicle names and plate numbers to their default values.
                 This is useful if vehicle entries have become inconsistent or mixed up.
                 Existing check statuses and assignments will be preserved.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex justify-end gap-3 mt-4">
+            <div className="flex justify-end gap-2 sm:gap-3 mt-2 sm:mt-4">
               <Button
                 variant="outline"
                 onClick={() => setIsResetVehiclesDialogOpen(false)}
-                className="h-9 text-sm"
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
               >
                 Cancel
               </Button>
               <Button
                 variant="default"
                 onClick={handleResetVehicles}
-                className="h-9 text-sm"
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
                 disabled={isSaving}
               >
                 {isSaving ? "Resetting..." : "Reset Vehicles"}
@@ -2289,19 +2187,19 @@ export default function EquipmentChecklistPage() {
 
         {/* Reset Confirmation Dialog */}
         <Dialog open={isResetDialogOpen} onOpenChange={setIsResetDialogOpen}>
-          <DialogContent className="max-w-[90%] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Reset Equipment Checklist</DialogTitle>
-              <DialogDescription>
+          <DialogContent className="max-w-[90%] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-base sm:text-lg">Reset Equipment Checklist</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
                 Are you sure you want to reset all equipment? This will clear all assignments, statuses, and response IDs.
                 This action cannot be undone.
               </DialogDescription>
             </DialogHeader>
-            <div className="flex justify-end gap-3 mt-4">
+            <div className="flex justify-end gap-2 sm:gap-3 mt-2 sm:mt-4">
               <Button
                 variant="outline"
                 onClick={() => setIsResetDialogOpen(false)}
-                className="h-9 text-sm"
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
               >
                 Cancel
               </Button>
@@ -2309,7 +2207,7 @@ export default function EquipmentChecklistPage() {
                 variant="destructive"
                 onClick={handleReset}
                 disabled={isSaving}
-                className="h-9 text-sm"
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
               >
                 {isSaving ? 'Resetting...' : 'Reset All'}
               </Button>
@@ -2319,9 +2217,9 @@ export default function EquipmentChecklistPage() {
 
         {/* Add Edit Vehicle Dialog */}
         <Dialog open={isEditVehicleDialogOpen} onOpenChange={setIsEditVehicleDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
+          <DialogContent className="max-w-[90%] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-base sm:text-lg">
                 {editingVehicle && sections[editingVehicle.sectionIndex]?.title === "ARMOURY"
                   ? "Edit Armoury Item"
                   : editingVehicle && sections[editingVehicle.sectionIndex]?.title === "BWC"
@@ -2329,9 +2227,9 @@ export default function EquipmentChecklistPage() {
                   : "Edit Vehicle"}
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">
+            <div className="space-y-3 py-2 sm:py-4">
+              <div className="space-y-1 sm:space-y-2">
+                <Label htmlFor="name" className="text-xs sm:text-sm">
                   {editingVehicle && sections[editingVehicle.sectionIndex]?.title === "ARMOURY"
                     ? "Armoury Item Name"
                     : editingVehicle && sections[editingVehicle.sectionIndex]?.title === "BWC"
@@ -2349,23 +2247,35 @@ export default function EquipmentChecklistPage() {
                       ? "e.g., G0247 8417"
                       : "e.g., CFS FRC"
                   }
+                  className="h-8 sm:h-10 text-xs sm:text-sm"
                 />
               </div>
               {editingVehicle && (sections[editingVehicle.sectionIndex]?.title === "VEHICLE FPT" || sections[editingVehicle.sectionIndex]?.title === "VEHICLE LPT") && (
-                <div className="space-y-2">
-                  <Label htmlFor="plateNumber">Plate Number</Label>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="plateNumber" className="text-xs sm:text-sm">Plate Number</Label>
                   <Input
                     id="plateNumber"
                     value={editingVehicle?.plateNumber || ''}
                     onChange={(e) => setEditingVehicle(prev => prev ? { ...prev, plateNumber: e.target.value } : null)}
                     placeholder="e.g., QX1859E"
+                    className="h-8 sm:h-10 text-xs sm:text-sm"
                   />
                 </div>
               )}
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditVehicleDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleSaveVehicle} disabled={isSaving}>
+            <DialogFooter className="sm:justify-end gap-2 sm:gap-3">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsEditVehicleDialogOpen(false)}
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveVehicle} 
+                disabled={isSaving}
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+              >
                 {isSaving ? 'Saving...' : 'Save Changes'}
               </Button>
             </DialogFooter>

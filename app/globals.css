@@ -259,3 +259,12 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2) !important;
 }
 
+/* Add text size adjustment for all browsers */
+html,
+:host {
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+}
+

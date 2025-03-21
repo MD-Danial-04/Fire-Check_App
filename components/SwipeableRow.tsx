@@ -157,7 +157,7 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
   }
 
   return (
-    <div ref={containerRef} className="relative touch-pan-y border-b border-gray-200 dark:border-gray-800">
+    <div ref={containerRef} className="relative touch-manipulation">
       {/* Overlay to block interactions when menu is open */}
       <AnimatePresence>
         {isMenuOpen && (
@@ -237,10 +237,8 @@ export function SwipeableRow({ children, onEdit, onClear, className, isChecked }
           }
         }}
         className={cn(
-          "relative bg-white dark:bg-neutral-900 touch-pan-y will-change-transform",
-          // Only disable pointer events when menu is open, not during exiting state
+          "relative bg-white dark:bg-neutral-900 touch-manipulation will-change-transform",
           isMenuOpen && "pointer-events-none",
-          // Always apply select-none to prevent text selection during swipe
           "select-none",
           className
         )}
