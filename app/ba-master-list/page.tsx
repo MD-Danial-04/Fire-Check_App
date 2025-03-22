@@ -32,15 +32,19 @@ const locations = [
   'RFV811',
   'LF811',
   'LF812',
+  'CFS811',
   'Others',
   'SPARE'
 ]
 
 // Helper function to get base location
-const getBaseLocation = (location: string | null): string => {
-  if (!location) return 'Unassigned'
+const getBaseLocation = (location: string | null, isSpare: boolean | undefined): string => {
+  // If it's marked as spare, always return SPARE category
+  if (isSpare) return 'SPARE';
   
-  const baseLocations = ['LF811', 'LF812', 'MRV811', 'RFV811']
+  if (!location) return 'Unassigned';
+  
+  const baseLocations = ['LF811', 'LF812', 'MRV811', 'RFV811', 'CFS811']
   for (const base of baseLocations) {
     if (location.toUpperCase().includes(base)) {
       return base
@@ -86,6 +90,112 @@ const getRoleOrder = (role: string): number => {
   return roleOrder[role] || 999; // Default to high number for unknown roles
 }
 
+// Helper function to check if service is due this month
+const isServiceDueThisMonth = (hydroDate: string | null): boolean => {
+  if (!hydroDate) return false;
+  const today = new Date();
+  const hydro = new Date(hydroDate);
+  return (
+    today.getFullYear() === hydro.getFullYear() &&
+    today.getMonth() === hydro.getMonth()
+  );
+};
+
+// Helper function to check if service is due next month
+const isServiceDueNextMonth = (hydroDate: string | null): boolean => {
+  if (!hydroDate) return false;
+  const today = new Date();
+  let nextMonth = new Date(today);
+  nextMonth.setMonth(today.getMonth() + 1);
+  
+  const hydro = new Date(hydroDate);
+  return (
+    hydro.getFullYear() === nextMonth.getFullYear() &&
+    hydro.getMonth() === nextMonth.getMonth()
+  );
+};
+
+// Helper function to check if service is due later this year
+const isServiceDueThisYear = (hydroDate: string | null): boolean => {
+  if (!hydroDate) return false;
+  const today = new Date();
+  const hydro = new Date(hydroDate);
+
+  // Check if it's due this year but not this month or next month
+  return (
+    hydro.getFullYear() === today.getFullYear() &&
+    hydro.getMonth() > today.getMonth() + 1
+  );
+};
+
+// Helper function to check if service is due next year
+const isServiceDueNextYear = (hydroDate: string | null): boolean => {
+  if (!hydroDate) return false;
+  const today = new Date();
+  const hydro = new Date(hydroDate);
+  
+  return hydro.getFullYear() === today.getFullYear() + 1;
+};
+
+// Helper function to get hydrostatic due status
+const getHydroTestDueStatus = (hydroDate: string | null): 'current' | 'nextMonth' | 'thisYear' | 'nextYear' | 'future' | null => {
+  if (!hydroDate) return null;
+  
+  if (isServiceDueThisMonth(hydroDate)) return 'current';
+  if (isServiceDueNextMonth(hydroDate)) return 'nextMonth';
+  if (isServiceDueThisYear(hydroDate)) return 'thisYear';
+  if (isServiceDueNextYear(hydroDate)) return 'nextYear';
+  
+  const hydro = new Date(hydroDate);
+  const today = new Date();
+  
+  if (hydro > today) return 'future';
+  
+  return null;
+};
+
+const isServiceOverdue = (hydroDate: string | null): boolean => {
+  if (!hydroDate) return false;
+  const today = new Date();
+  const hydro = new Date(hydroDate);
+  return today > hydro;
+};
+
+// Helper function to get the status text based on due status
+const getHydroStatusText = (status: 'current' | 'nextMonth' | 'thisYear' | 'nextYear' | 'future' | null): string => {
+  switch (status) {
+    case 'current': return 'Hydrostatic Test Due This Month';
+    case 'nextMonth': return 'Hydrostatic Test Due Next Month';
+    case 'thisYear': return 'Hydrostatic Test Due Later This Year';
+    case 'nextYear': return 'Hydrostatic Test Due Next Year';
+    case 'future': return 'Hydrostatic Test Due In Future';
+    default: return '';
+  }
+};
+
+// Helper function to get the appropriate class for the status color
+const getHydroStatusClass = (status: 'current' | 'nextMonth' | 'thisYear' | 'nextYear' | 'future' | null): string => {
+  switch (status) {
+    case 'current': return 'text-amber-600 dark:text-amber-400';
+    case 'nextMonth': return 'text-orange-500 dark:text-orange-400';
+    case 'thisYear': return 'text-blue-600 dark:text-blue-400';
+    case 'nextYear': return 'text-green-600 dark:text-green-500';
+    case 'future': return 'text-green-600/70 dark:text-green-500/70';
+    default: return '';
+  }
+};
+
+// Helper function to get background color class for table rows
+const getHydroStatusBgClass = (status: 'current' | 'nextMonth' | 'thisYear' | 'nextYear' | 'future' | null): string => {
+  switch (status) {
+    case 'current': return 'bg-amber-50 dark:bg-amber-900/30';
+    case 'nextMonth': return 'bg-orange-50 dark:bg-orange-900/20';
+    case 'thisYear': return 'bg-blue-50 dark:bg-blue-900/10';
+    case 'nextYear': return 'bg-green-50 dark:bg-green-900/10';
+    default: return '';
+  }
+};
+
 export default function BAMasterList() {
   const [searchTerm, setSearchTerm] = useState('')
   const [locationFilter, setLocationFilter] = useState('All Locations')
@@ -95,41 +205,7 @@ export default function BAMasterList() {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
   const [showMobileFilter, setShowMobileFilter] = useState(false)
-
-  // Calculate stats from backplates
-  const stats = {
-    total: backplates.length,
-    inService: backplates.filter(b => !b.is_spare).length,
-    dueService: backplates.filter(b => {
-      if (!b.service_due_date) return false;
-      
-      const now = new Date();
-      const dueDate = new Date(b.service_due_date);
-      
-      return dueDate.getMonth() === now.getMonth() && 
-             dueDate.getFullYear() === now.getFullYear();
-    }).length,
-    spare: backplates.filter(b => b.is_spare).length
-  }
-
-  // Helper function to check if service is due this month
-  const isServiceDueThisMonth = (dueDate: string | null): boolean => {
-    if (!dueDate) return false;
-    const today = new Date();
-    const due = new Date(dueDate);
-    return (
-      today.getFullYear() === due.getFullYear() &&
-      today.getMonth() === due.getMonth()
-    );
-  };
-
-  const isServiceOverdue = (dueDate: string | null): boolean => {
-    if (!dueDate) return false;
-    const today = new Date();
-    const due = new Date(dueDate);
-    return today > due;
-  };
-
+  
   useEffect(() => {
     fetchBAMasterList()
 
@@ -165,25 +241,35 @@ export default function BAMasterList() {
     }
   }
 
+  // Calculate stats from backplates
+  const stats = {
+    total: backplates.length,
+    inService: backplates.filter(b => !b.is_spare).length,
+    dueService: backplates.filter(b => isServiceDueThisMonth(b.hydro_date)).length,
+    dueNextMonth: backplates.filter(b => isServiceDueNextMonth(b.hydro_date)).length,
+    dueThisYear: backplates.filter(b => isServiceDueThisYear(b.hydro_date)).length,
+    spare: backplates.filter(b => b.is_spare).length
+  }
+
   // Update the filtering logic to include sorting by role
   const filteredBackplates = backplates.filter(backplate => {
     const matchesSearch = searchTerm === '' || 
       backplate.serial_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (backplate.cylinder_serial && backplate.cylinder_serial.toLowerCase().includes(searchTerm.toLowerCase()))
     
-    const baseLocation = getBaseLocation(backplate.location);
+    const baseLocation = getBaseLocation(backplate.location, backplate.is_spare);
     const matchesLocation = locationFilter === 'All Locations' || 
       baseLocation === locationFilter;
 
     return matchesSearch && matchesLocation
   }).sort((a, b) => {
     // First sort by base location
-    const baseLocationA = getBaseLocation(a.location);
-    const baseLocationB = getBaseLocation(b.location);
+    const baseLocationA = getBaseLocation(a.location, a.is_spare);
+    const baseLocationB = getBaseLocation(b.location, b.is_spare);
     
     if (baseLocationA !== baseLocationB) {
       // Use the locationOrder array for consistent location sorting
-      const locationOrder = ['LF811', 'LF812', 'MRV811', 'RFV811', 'SPARE', 'Others', 'Unassigned'];
+      const locationOrder = ['LF811', 'LF812', 'MRV811', 'RFV811', 'CFS811', 'SPARE', 'Others', 'Unassigned'];
       return locationOrder.indexOf(baseLocationA) - locationOrder.indexOf(baseLocationB);
     }
     
@@ -202,7 +288,7 @@ export default function BAMasterList() {
 
   // Group backplates by base location
   const groupedBackplates = filteredBackplates.reduce((acc, backplate) => {
-    const baseLocation = getBaseLocation(backplate.location);
+    const baseLocation = getBaseLocation(backplate.location, backplate.is_spare);
     if (!acc[baseLocation]) {
       acc[baseLocation] = [];
     }
@@ -220,7 +306,7 @@ export default function BAMasterList() {
   });
 
   // Sort order for locations
-  const locationOrder = ['LF811', 'LF812', 'MRV811', 'RFV811', 'SPARE', 'Others', 'Unassigned'];
+  const locationOrder = ['LF811', 'LF812', 'MRV811', 'RFV811', 'CFS811', 'SPARE', 'Others', 'Unassigned'];
   const sortedLocations = Object.entries(groupedBackplates).sort((a, b) => {
     return locationOrder.indexOf(a[0]) - locationOrder.indexOf(b[0]);
   });
@@ -235,13 +321,25 @@ export default function BAMasterList() {
           let roleName = getRole(backplate.location);
           if (roleName === '-') {
             if (title === 'SPARE') {
-              roleName = `Spare ${index + 1}`;
+              // Distinguish between cylinders and backplates for spare items
+              if (backplate.cylinder_serial && !backplate.serial_number) {
+                roleName = 'SPARE CYLINDERS';
+              } else if (backplate.serial_number && !backplate.cylinder_serial) {
+                roleName = 'SPARE BACKPLATES';
+              } else {
+                roleName = 'SPARE';
+              }
             } else if (title === 'Others') {
               roleName = backplate.location || 'Unknown';
+            } else if (title === 'CFS811') {
+              // Keep consistent with desktop view for CFS811
+              roleName = 'CFS811';
             } else {
               roleName = backplate.location?.replace(title, '').trim() || 'Unknown';
             }
           }
+          
+          const hydroStatus = getHydroTestDueStatus(backplate.hydro_date);
           
           return (
             <div 
@@ -252,15 +350,23 @@ export default function BAMasterList() {
                 <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                   {roleName}
                 </span>
-                {!backplate.is_spare ? (
-                  <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1">
-                    <Check className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
-                  </div>
-                ) : (
-                  <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1 opacity-40">
-                    <X className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
-                  </div>
-                )}
+                <div className="flex items-center gap-1">
+                  {hydroStatus && (
+                    <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                      <AlertCircle className="h-3 w-3" />
+                      <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                    </div>
+                  )}
+                  {!backplate.is_spare ? (
+                    <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1">
+                      <Check className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
+                    </div>
+                  ) : (
+                    <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1 opacity-40">
+                      <X className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="space-y-2 border-b border-gray-200 dark:border-[#FCF6EC]/20 pb-4">
                 <div className="flex items-center justify-between text-[10px]">
@@ -275,6 +381,23 @@ export default function BAMasterList() {
                     {backplate.cylinder_serial || '-'}
                   </span>
                 </div>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Hydrostatic</span>
+                  <span className={`font-['Azeret_Mono'] ${hydroStatus ? getHydroStatusClass(hydroStatus) : 'text-gray-900 dark:text-[#FCF6EC]'} tracking-[0.1em] text-[10px] text-right`}>
+                    {backplate.hydro_date ? new Date(backplate.hydro_date).toLocaleDateString('en-GB', {
+                      year: 'numeric',
+                      month: 'short'
+                    }) : '-'}
+                  </span>
+                </div>
+                {backplate.remarks && (
+                  <div className="flex items-center justify-between text-[10px] mt-2">
+                    <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Remarks</span>
+                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                      {backplate.remarks}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -288,69 +411,82 @@ export default function BAMasterList() {
     <Table>
       <TableHeader>
         <TableRow className="bg-gray-200 dark:bg-[#2E2521]">
-          <TableHead className="w-[60px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">S/N</TableHead>
-          <TableHead className="w-[160px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Serial Number</TableHead>
-          <TableHead className="w-[160px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Cylinder S/R No.</TableHead>
+          <TableHead className="w-[50px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">S/N</TableHead>
+          <TableHead className="w-[140px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Serial Number</TableHead>
+          <TableHead className="w-[140px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Cylinder S/R No.</TableHead>
           <TableHead className="w-[100px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">DOB</TableHead>
           <TableHead className="w-[110px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Hydrostatic</TableHead>
-          <TableHead className="w-[110px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Service Due</TableHead>
           <TableHead className="w-[140px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Location</TableHead>
-          <TableHead className="w-[80px] text-center text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Status</TableHead>
+          <TableHead className="w-[110px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Telemetry ID</TableHead>
+          <TableHead className="w-[140px] text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Remarks</TableHead>
+          <TableHead className="w-[70px] text-center text-sm font-medium text-gray-900 dark:text-[#FCF6EC]/70 font-['Azeret_Mono']">Status</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {filteredBackplates.map((backplate, index) => (
-          <TableRow 
-            key={backplate.id}
-            className={`
-              bg-white hover:bg-gray-50 dark:hover:bg-[#FCF6EC]/5
-              ${backplate.location === 'SPARE' ? 'bg-gray-50 dark:bg-[#FCF6EC]/5' : ''}
-              ${isServiceDueThisMonth(backplate.service_due_date) ? 'bg-amber-50 dark:bg-amber-900/30' : ''}
-            `}
-          >
-            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">{index + 1}</TableCell>
-            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-              {backplate.serial_number}
-            </TableCell>
-            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-              {backplate.cylinder_serial || '-'}
-            </TableCell>
-            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-              {backplate.date_of_birth ? new Date(backplate.date_of_birth).toLocaleDateString('en-GB', { 
-                year: 'numeric', 
-                month: 'short'
-              }) : '-'}
-            </TableCell>
-            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-              {backplate.hydro_date ? new Date(backplate.hydro_date).toLocaleDateString('en-GB', {
-                year: '2-digit',
-                month: 'short'
-              }) : '-'}
-            </TableCell>
-            <TableCell 
-              className={`text-sm ${isServiceDueThisMonth(backplate.service_due_date) ? 'text-amber-600 font-medium' : 'text-gray-700 dark:text-[#FCF6EC]/60'} font-light font-['Azeret_Mono']`}
+        {filteredBackplates.map((backplate, index) => {
+          const hydroStatus = getHydroTestDueStatus(backplate.hydro_date);
+          return (
+            <TableRow 
+              key={backplate.id}
+              className={`
+                bg-white hover:bg-gray-50 dark:hover:bg-[#FCF6EC]/5
+                ${backplate.is_spare ? 'bg-gray-50 dark:bg-[#FCF6EC]/5' : ''}
+                ${hydroStatus ? getHydroStatusBgClass(hydroStatus) : ''}
+              `}
             >
-              {backplate.service_due_date ? new Date(backplate.service_due_date).toLocaleDateString('en-GB', {
-                year: '2-digit',
-                month: 'short'
-              }) : '-'}
-            </TableCell>
-            <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
-              {backplate.location || '-'}
-            </TableCell>
-            <TableCell className="text-center">
-              {!backplate.is_spare ? (
-                <div className="bg-gray-100 rounded-full p-1.5 mx-auto w-fit">
-                  <Check className="h-4 w-4 text-gray-900" />
+              <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">{index + 1}</TableCell>
+              <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+                {backplate.serial_number}
+              </TableCell>
+              <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+                {backplate.cylinder_serial || '-'}
+              </TableCell>
+              <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+                {backplate.date_of_birth ? new Date(backplate.date_of_birth).toLocaleDateString('en-GB', { 
+                  year: 'numeric', 
+                  month: 'short'
+                }) : '-'}
+              </TableCell>
+              <TableCell 
+                className={`text-sm ${hydroStatus ? getHydroStatusClass(hydroStatus) : 'text-gray-700 dark:text-[#FCF6EC]/60'} font-light font-['Azeret_Mono']`}
+              >
+                <div className="flex flex-col">
+                  <span>
+                    {backplate.hydro_date ? new Date(backplate.hydro_date).toLocaleDateString('en-GB', {
+                      year: 'numeric',
+                      month: 'short'
+                    }) : '-'}
+                  </span>
+                  {hydroStatus && (
+                    <span className="text-[10px] mt-1">
+                      {getHydroStatusText(hydroStatus).replace('Hydrostatic Test ', '')}
+                    </span>
+                  )}
                 </div>
-              ) : (
-                <div className="bg-gray-100 rounded-full p-1.5 mx-auto w-fit opacity-40">
-                  <X className="h-4 w-4 text-gray-900" />
-                </div>
-              )}
-            </TableCell>
-          </TableRow>
-        ))}
+              </TableCell>
+              <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+                {backplate.location || '-'}
+              </TableCell>
+              <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+                {backplate.telemetry_id || '-'}
+              </TableCell>
+              <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
+                {backplate.remarks || '-'}
+              </TableCell>
+              <TableCell className="text-center">
+                {!backplate.is_spare ? (
+                  <div className="bg-gray-100 rounded-full p-1.5 mx-auto w-fit">
+                    <Check className="h-4 w-4 text-gray-900" />
+                  </div>
+                ) : (
+                  <div className="bg-gray-100 rounded-full p-1.5 mx-auto w-fit opacity-40">
+                    <X className="h-4 w-4 text-gray-900" />
+                  </div>
+                )}
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );
@@ -392,33 +528,48 @@ export default function BAMasterList() {
           </div>
           
           {/* Stats Overview */}
-          <div className="flex flex-row justify-between mt-8 max-w-7xl mx-auto px-2">
-            <div className="flex flex-col items-start">
-              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">TOTAL</p>
-              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.total}</p>
+          <div className="flex flex-col mt-8 max-w-7xl mx-auto px-2">
+            <div className="grid grid-cols-3 md:grid-cols-12 gap-4">
+              <div className="flex flex-col col-span-1 md:col-span-4 items-start">
+                <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">TOTAL</p>
+                <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.total}</p>
+              </div>
+              
+              <div className="flex flex-col col-span-1 md:col-span-4 items-start">
+                <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">
+                  <span>IN</span>
+                  <span className="md:block">SERVICE</span>
+                </p>
+                <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.inService}</p>
+              </div>
+              
+              <div className="flex flex-col col-span-1 md:col-span-4 items-start">
+                <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">SPARE</p>
+                <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.spare}</p>
+              </div>
             </div>
             
-            <div className="flex flex-col items-start">
-              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">
-                <span className="md:hidden">IN SERVICE</span>
-                <span className="hidden md:inline">IN<br />SERVICE</span>
-              </p>
-              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em] md:ml-8">{stats.inService}</p>
+            <div className="border-t border-gray-200 dark:border-[#FCF6EC]/10 mt-6 pt-6 w-full">
+              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em] mb-2 md:mb-0 md:float-left md:mr-2">DUE</p>
+              <div className="grid grid-cols-2 md:flex md:flex-row gap-3 md:gap-6">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-600"></span>
+                  <span className="text-amber-600 text-[13px] md:text-[14px] font-['Azeret_Mono']">This Month: {stats.dueService}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full bg-orange-500"></span>
+                  <span className="text-orange-500 text-[13px] md:text-[14px] font-['Azeret_Mono']">Next Month: {stats.dueNextMonth}</span>
+                </div>
+                <div className="flex items-center gap-1.5 col-span-2 md:col-span-1">
+                  <span className="h-2.5 w-2.5 rounded-full bg-blue-600"></span>
+                  <span className="text-blue-600 text-[13px] md:text-[14px] font-['Azeret_Mono']">This Year: {stats.dueThisYear}</span>
+                </div>
+              </div>
             </div>
-            
-            <div className="flex flex-col items-start">
-              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">DUE</p>
-              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.dueService}</p>
-            </div>
-            
-            <div className="flex flex-col items-start">
-              <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">SPARE</p>
-              <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.spare}</p>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
+        {/* Main Content */}
         <main className="px-6 pb-6">
           {/* Search and Actions */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-6 py-4 md:py-6 max-w-7xl mx-auto">
@@ -600,6 +751,17 @@ export default function BAMasterList() {
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                     {role}
                                   </span>
+                                  {(() => {
+                                    const hydroDate = (groupedBackplates['LF811'] || []).find(b => getRole(b.location) === role)?.hydro_date ?? null;
+                                    const hydroStatus = getHydroTestDueStatus(hydroDate);
+                                    if (!hydroStatus) return null;
+                                    return (
+                                      <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                        <AlertCircle className="h-3 w-3" />
+                                        <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -615,12 +777,6 @@ export default function BAMasterList() {
                                     {(groupedBackplates['LF811'] || []).find(b => getRole(b.location) === role)?.cylinder_serial || '-'}
                                   </div>
                                 </div>
-                                {isServiceDueThisMonth((groupedBackplates['LF811'] || []).find(b => getRole(b.location) === role)?.service_due_date ?? null) && (
-                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                    <AlertCircle className="h-3 w-3" />
-                                    <span>Service Due</span>
-                                  </div>
-                                )}
                               </div>
                             ))}
                           </div>
@@ -637,6 +793,17 @@ export default function BAMasterList() {
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                     {role}
                                   </span>
+                                  {(() => {
+                                    const hydroDate = (groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.hydro_date ?? null;
+                                    const hydroStatus = getHydroTestDueStatus(hydroDate);
+                                    if (!hydroStatus) return null;
+                                    return (
+                                      <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                        <AlertCircle className="h-3 w-3" />
+                                        <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -652,12 +819,6 @@ export default function BAMasterList() {
                                     {(groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.cylinder_serial || '-'}
                                   </div>
                                 </div>
-                                {isServiceDueThisMonth((groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.service_due_date ?? null) && (
-                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                    <AlertCircle className="h-3 w-3" />
-                                    <span>Service Due</span>
-                                  </div>
-                                )}
                               </div>
                             ))}
                           </div>
@@ -677,25 +838,31 @@ export default function BAMasterList() {
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                     Set {index + 1}
                                   </span>
+                                  {(() => {
+                                    const hydroStatus = getHydroTestDueStatus(backplate.hydro_date);
+                                    if (!hydroStatus) return null;
+                                    return (
+                                      <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                        <AlertCircle className="h-3 w-3" />
+                                        <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between text-[10px]">
                                     <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Backplate</span>
-                                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em]">{backplate.serial_number}</span>
+                                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                        {backplate.serial_number}
+                                    </span>
                                   </div>
                                   <div className="flex items-center justify-between text-[10px]">
                                     <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Cylinder</span>
                                     <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                        {backplate.cylinder_serial || '-'}
+                                    {backplate.cylinder_serial || '-'}
                                     </span>
                                   </div>
                                 </div>
-                                {isServiceDueThisMonth(backplate.service_due_date) && (
-                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs">
-                                    <AlertCircle className="h-3 w-3" />
-                                    <span>Service Due</span>
-                                  </div>
-                                )}
                               </div>
                             ))}
                           </div>
@@ -715,6 +882,17 @@ export default function BAMasterList() {
                                     <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                       {setNumber}
                                     </span>
+                                    {(() => {
+                                      const hydroDate = (groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.hydro_date ?? null;
+                                      const hydroStatus = getHydroTestDueStatus(hydroDate);
+                                      if (!hydroStatus) return null;
+                                      return (
+                                        <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                          <AlertCircle className="h-3 w-3" />
+                                          <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                   <div className="grid grid-cols-2 gap-y-2">
                                     <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -730,12 +908,6 @@ export default function BAMasterList() {
                                       {(groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.cylinder_serial || '-'}
                                     </div>
                                   </div>
-                                  {isServiceDueThisMonth((groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.service_due_date ?? null) && (
-                                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                      <AlertCircle className="h-3 w-3" />
-                                      <span>Service Due</span>
-                                    </div>
-                                  )}
                                 </div>
                               ))}
                             </div>
@@ -745,64 +917,131 @@ export default function BAMasterList() {
                       
                       {/* Third Row: Others and SPARE */}
                       <div className="mt-6 grid grid-cols-2 gap-6">
-                        {/* Others */}
+                        {/* CFS811 and Others */}
                         <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
                           <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
                             Others
                           </h3>
-                          <div className="p-4 space-y-4">
-                            {(groupedBackplates['Others'] || []).map((backplate) => {
-                              const roleName = getRole(backplate.location) !== '-' ? 
-                                getRole(backplate.location) : 
-                                backplate.location || 'Unknown';
-                              
-                              return (
-                                <div key={backplate.id} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                      {roleName}
-                                    </span>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-y-2">
-                                    <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                      Backplate
-                                    </div>
-                                    <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                      {backplate.serial_number || '-'}
-                                    </div>
-                                    <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
-                                      Cylinder
-                                    </div>
-                                    <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                                      {backplate.cylinder_serial || '-'}
-                                    </div>
-                                  </div>
-                                  {isServiceDueThisMonth(backplate.service_due_date) && (
-                                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                      <AlertCircle className="h-3 w-3" />
-                                      <span>Service Due</span>
-                                    </div>
-                                  )}
+                          <div className="p-4 space-y-6">
+                            {/* CFS811 Items */}
+                            {(groupedBackplates['CFS811'] || []).length > 0 && (
+                              <div>
+                                <h4 className="text-xs tracking-[0.15em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] bg-gray-100 dark:bg-[#2E2521]/50 p-2 mb-3 rounded-sm">
+                                  CFS811
+                                </h4>
+                                <div className="space-y-4">
+                                  {(groupedBackplates['CFS811'] || []).map((backplate) => {
+                                    const roleName = getRole(backplate.location) !== '-' ? 
+                                      getRole(backplate.location) : 
+                                      backplate.location || 'Unknown';
+                                    
+                                    return (
+                                      <div key={backplate.id} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                            {roleName}
+                                          </span>
+                                          {isServiceDueThisMonth(backplate.hydro_date) && (
+                                            <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
+                                              <AlertCircle className="h-3 w-3" />
+                                              <span>Hydrostatic Test Due</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-y-2">
+                                          <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                            Backplate
+                                          </div>
+                                          <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                            {backplate.serial_number || '-'}
+                                          </div>
+                                          <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                            Cylinder
+                                          </div>
+                                          <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                            {backplate.cylinder_serial || '-'}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
-                              );
-                            })}
+                              </div>
+                            )}
+                            
+                            {/* Others Items */}
+                            {(groupedBackplates['Others'] || []).length > 0 && (
+                              <div>
+                                <h4 className="text-xs tracking-[0.15em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] bg-gray-100 dark:bg-[#2E2521]/50 p-2 mb-3 rounded-sm">
+                                  Other Locations
+                                </h4>
+                                <div className="space-y-4">
+                                  {(groupedBackplates['Others'] || []).map((backplate) => {
+                                    const roleName = getRole(backplate.location) !== '-' ? 
+                                      getRole(backplate.location) : 
+                                      backplate.location || 'Unknown';
+                                    
+                                    return (
+                                      <div key={backplate.id} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                            {roleName}
+                                          </span>
+                                          {isServiceDueThisMonth(backplate.hydro_date) && (
+                                            <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
+                                              <AlertCircle className="h-3 w-3" />
+                                              <span>Hydrostatic Test Due</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-y-2">
+                                          <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                            Backplate
+                                          </div>
+                                          <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                            {backplate.serial_number || '-'}
+                                          </div>
+                                          <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                            Cylinder
+                                          </div>
+                                          <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                            {backplate.cylinder_serial || '-'}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
-            </div>
+                        </div>
+
                         {/* SPARE */}
                         <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
                           <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
                             SPARE
                           </h3>
                           <div className="p-4 space-y-4">
-                            {(groupedBackplates['SPARE'] || []).slice(0, 4).map((backplate, index) => (
+                            {(groupedBackplates['SPARE'] || []).map((backplate, index) => (
                               <div 
-                                key={backplate.id}
+                          key={backplate.id}
                                 className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm"
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : `Spare ${index + 1}`}
-                      </span>
+                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : 
+                                      backplate.cylinder_serial && !backplate.serial_number ? 'SPARE CYLINDERS' : 
+                                      backplate.serial_number && !backplate.cylinder_serial ? 'SPARE BACKPLATES' : 
+                                      'SPARE'
+                                    }
+                                  </span>
+                                  {isServiceDueThisMonth(backplate.hydro_date) && (
+                                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Hydrostatic Test Due</span>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -818,12 +1057,6 @@ export default function BAMasterList() {
                                     {backplate.cylinder_serial || '-'}
                                   </div>
                                 </div>
-                                {isServiceDueThisMonth(backplate.service_due_date) && (
-                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                    <AlertCircle className="h-3 w-3" />
-                                    <span>Service Due</span>
-                                  </div>
-                                )}
                               </div>
                             ))}
                           </div>
@@ -855,6 +1088,17 @@ export default function BAMasterList() {
                                       <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                         {setNumber}
                                       </span>
+                                      {(() => {
+                                        const hydroDate = (groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.hydro_date ?? null;
+                                        const hydroStatus = getHydroTestDueStatus(hydroDate);
+                                        if (!hydroStatus) return null;
+                                        return (
+                                          <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                            <AlertCircle className="h-3 w-3" />
+                                            <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                     <div className="grid grid-cols-2 gap-y-2">
                                       <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -870,12 +1114,6 @@ export default function BAMasterList() {
                                         {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.cylinder_serial || '-'}
                                       </div>
                                     </div>
-                                    {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.service_due_date ?? null) && (
-                                      <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                        <AlertCircle className="h-3 w-3" />
-                                        <span>Service Due</span>
-                                      </div>
-                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -887,6 +1125,17 @@ export default function BAMasterList() {
                                     <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                       {setNumber}
                                     </span>
+                                    {(() => {
+                                      const hydroDate = (groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.hydro_date ?? null;
+                                      const hydroStatus = getHydroTestDueStatus(hydroDate);
+                                      if (!hydroStatus) return null;
+                                      return (
+                                        <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                          <AlertCircle className="h-3 w-3" />
+                                          <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                   <div className="grid grid-cols-2 gap-y-2">
                                     <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -902,12 +1151,6 @@ export default function BAMasterList() {
                                       {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.cylinder_serial || '-'}
                                     </div>
                                   </div>
-                                  {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === setNumber)?.service_due_date ?? null) && (
-                                    <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                      <AlertCircle className="h-3 w-3" />
-                                      <span>Service Due</span>
-                                    </div>
-                                  )}
                                 </div>
                               ))
                             )
@@ -920,8 +1163,18 @@ export default function BAMasterList() {
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : `Spare ${index + 1}`}
+                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : 
+                                      backplate.cylinder_serial && !backplate.serial_number ? 'SPARE CYLINDERS' : 
+                                      backplate.serial_number && !backplate.cylinder_serial ? 'SPARE BACKPLATES' : 
+                                      'SPARE'
+                                    }
                                   </span>
+                                  {isServiceDueThisMonth(backplate.hydro_date) && (
+                                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Hydrostatic Test Due</span>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -937,12 +1190,6 @@ export default function BAMasterList() {
                                     {backplate.cylinder_serial || '-'}
                                   </div>
                                 </div>
-                                {isServiceDueThisMonth(backplate.service_due_date) && (
-                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                    <AlertCircle className="h-3 w-3" />
-                                    <span>Service Due</span>
-                                  </div>
-                                )}
                               </div>
                             ))
                           ) : locationFilter === 'Others' ? (
@@ -953,6 +1200,12 @@ export default function BAMasterList() {
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                     {getRole(backplate.location) !== '-' ? getRole(backplate.location) : backplate.location || 'Unknown'}
                                   </span>
+                                  {isServiceDueThisMonth(backplate.hydro_date) && (
+                                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Hydrostatic Test Due</span>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -965,15 +1218,40 @@ export default function BAMasterList() {
                                     Cylinder
                                   </div>
                                   <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                            {backplate.cylinder_serial || '-'}
+                                    {backplate.cylinder_serial || '-'}
                                   </div>
                                 </div>
-                                {isServiceDueThisMonth(backplate.service_due_date) && (
-                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                    <AlertCircle className="h-3 w-3" />
-                                    <span>Service Due</span>
+                              </div>
+                            ))
+                          ) : locationFilter === 'CFS811' ? (
+                            // For CFS811 items
+                            (groupedBackplates[locationFilter] || []).map((backplate) => (
+                              <div key={backplate.id} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                    CFS811
+                                  </span>
+                                  {isServiceDueThisMonth(backplate.hydro_date) && (
+                                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Hydrostatic Test Due</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-y-2">
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Backplate
                                   </div>
-                                )}
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {backplate.serial_number || '-'}
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                    Cylinder
+                                  </div>
+                                  <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                    {backplate.cylinder_serial || '-'}
+                                  </div>
+                                </div>
                               </div>
                             ))
                           ) : (
@@ -984,6 +1262,12 @@ export default function BAMasterList() {
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                     {role}
                                   </span>
+                                  {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === role)?.hydro_date ?? null) && (
+                                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
+                                      <AlertCircle className="h-3 w-3" />
+                                      <span>Hydrostatic Test Due</span>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -999,18 +1283,12 @@ export default function BAMasterList() {
                                     {(groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === role)?.cylinder_serial || '-'}
                                   </div>
                                 </div>
-                                {isServiceDueThisMonth((groupedBackplates[locationFilter] || []).find(b => getRole(b.location) === role)?.service_due_date ?? null) && (
-                                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-xs mt-2">
-                                    <AlertCircle className="h-3 w-3" />
-                                    <span>Service Due</span>
-                                  </div>
-                                )}
                               </div>
                             ))
-                              )}
-                            </div>
+                          )}
+                        </div>
                       </div>
-                </div>
+                    </div>
                   </div>
                 )}
             </div>
@@ -1020,14 +1298,5 @@ export default function BAMasterList() {
       </div>
     </div>
   )
-}
-
-function StatCard({ title, value }: { title: string; value: number }) {
-  return (
-    <div className="flex flex-col items-center md:items-start space-y-1">
-      <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">{title}</p>
-      <p className="text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{value}</p>
-    </div>
-  );
 }
 

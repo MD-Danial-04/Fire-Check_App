@@ -35,6 +35,12 @@ WITH
         va_1.vehicle_type <> 'RFV811'::text
         OR va_1."position" <> 'OOW'::text
       )
+      AND va_1.personnel_name IS NOT NULL
+      AND TRIM(
+        both
+        FROM
+          va_1.personnel_name
+      ) <> ''::text
   )
 SELECT
   va.id,
@@ -79,7 +85,15 @@ SELECT
       LIMIT
         1
     )
-    WHEN va.vehicle_type = 'MRV811'::text AND va."position" <> 'OOW'::text THEN (
+    WHEN va.vehicle_type = 'MRV811'::text
+    AND va."position" <> 'OOW'::text
+    AND va."position" <> 'STEERSMAN'::text
+    AND va.personnel_name IS NOT NULL
+    AND TRIM(
+      both
+      FROM
+        va.personnel_name
+    ) <> ''::text THEN (
       SELECT
         bm.serial_number
       FROM
@@ -94,7 +108,14 @@ SELECT
         1
     )
     WHEN va.vehicle_type = 'RFV811'::text
-    AND va."position" <> 'OOW'::text THEN (
+    AND va."position" <> 'OOW'::text
+    AND va."position" <> 'STEERSMAN'::text
+    AND va.personnel_name IS NOT NULL
+    AND TRIM(
+      both
+      FROM
+        va.personnel_name
+    ) <> ''::text THEN (
       SELECT
         bm.serial_number
       FROM
@@ -119,7 +140,15 @@ SELECT
       LIMIT
         1
     )
-    WHEN va.vehicle_type = 'MRV811'::text AND va."position" <> 'OOW'::text THEN (
+    WHEN va.vehicle_type = 'MRV811'::text
+    AND va."position" <> 'OOW'::text
+    AND va."position" <> 'STEERSMAN'::text
+    AND va.personnel_name IS NOT NULL
+    AND TRIM(
+      both
+      FROM
+        va.personnel_name
+    ) <> ''::text THEN (
       SELECT
         bm.cylinder_serial
       FROM
@@ -134,7 +163,14 @@ SELECT
         1
     )
     WHEN va.vehicle_type = 'RFV811'::text
-    AND va."position" <> 'OOW'::text THEN (
+    AND va."position" <> 'OOW'::text
+    AND va."position" <> 'STEERSMAN'::text
+    AND va.personnel_name IS NOT NULL
+    AND TRIM(
+      both
+      FROM
+        va.personnel_name
+    ) <> ''::text THEN (
       SELECT
         bm.cylinder_serial
       FROM
@@ -150,6 +186,13 @@ SELECT
   END AS vessel_cylinder
 FROM
   vehicle_assignments va
+WHERE
+  va.personnel_name IS NOT NULL
+  AND TRIM(
+    both
+    FROM
+      va.personnel_name
+  ) <> ''::text
 ORDER BY
   va.section,
   va."position"; 

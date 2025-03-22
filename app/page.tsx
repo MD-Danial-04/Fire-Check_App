@@ -298,10 +298,10 @@ export default function Dashboard() {
           console.error('Error fetching personnel data:', personnelError);
         }
 
-        // Identify the 5 personnel who need BWCs:
-        // MRV811 Duty Officer, LF811 SC, PO, LF812 SC, PO
+        // Identify the personnel who need BWCs, including ENG/EMT for MRV811
         const bwcRequiredPositions = [
           { vehicle: 'MRV811', position: 'Duty Officer' },
+          { vehicle: 'MRV811', position: 'ENG/EMT' },
           { vehicle: 'LF811', position: 'SC' },
           { vehicle: 'LF811', position: 'PO' },
           { vehicle: 'LF812', position: 'SC' },
@@ -353,13 +353,21 @@ export default function Dashboard() {
         
         setBwcPersonnel(updatedBwcPersonnel);
 
+        // Count unique personnel for logging purposes
+        const uniquePersonnel = new Set<string>();
+        bwcRequiredPersonnel.forEach(person => {
+          if (person.personnel) {
+            uniquePersonnel.add(person.personnel);
+          }
+        });
+
         // Calculate progress for each section
         const progress = {
           armoury: calculateSectionProgress(sections.armoury),
           vehicleFPT: calculateSectionProgress(sections.vehicleFPT),
           vehicleLPT: calculateSectionProgress(sections.vehicleLPT),
-          // Special handling for BWC - track all 9 but only expect 5 to be checked
-          bwc: calculateBwcProgress(sections.bwc)
+          // Special handling for BWC
+          bwc: calculateBwcProgress(sections.bwc, assignedBwcs, uniquePersonnel, bwcRequiredPersonnel)
         };
 
         setEquipmentProgress(progress);
@@ -576,21 +584,35 @@ export default function Dashboard() {
     };
 
     // Special helper function for BWC progress
-    const calculateBwcProgress = (items: any[]) => {
-      const totalItems = items.length; // This will be 9
-      const targetChecks = 5; // We only expect 5 checks
+    const calculateBwcProgress = (items: any[], assignedBwcs: any[], uniquePersonnel: Set<string>, personnelList: any[]) => {
+      // Count unique personnel who have BWCs assigned
+      const assignedPersonnel = new Set<string>();
+      assignedBwcs.forEach(bwc => {
+        if (bwc.assigned_to) {
+          assignedPersonnel.add(bwc.assigned_to);
+        }
+      });
       
-      const completed = items.filter(item => item.checked).length;
-      // We're removing in-progress tracking as requested
+      const uniqueCompleted = assignedPersonnel.size;
       
-      // For BWC, we consider it fully complete if at least 5 items are checked
-      const effectiveCompleted = Math.min(completed, targetChecks);
+      // Check if same person is assigned as both ENG/EMT in MRV811 and any PO position
+      const engEmtPerson = personnelList.find(p => p.vehicle === 'MRV811' && p.position === 'ENG/EMT')?.personnel;
+      const poPersons = personnelList.filter(p => (p.vehicle === 'LF811' || p.vehicle === 'LF812') && p.position === 'PO')
+        .map(p => p.personnel);
+      
+      // If the same person is assigned as both ENG/EMT and PO, we need 5 BWCs, otherwise 6
+      const hasDuplicateRole = engEmtPerson && poPersons.includes(engEmtPerson);
+      const targetChecks = hasDuplicateRole ? 5 : 6;
+      
+      // Calculate effective completion
+      const effectiveCompleted = Math.min(uniqueCompleted, targetChecks);
       const effectivePending = targetChecks - effectiveCompleted;
       
-      console.log(`BWC Progress: ${completed}/${totalItems} items checked, ${effectiveCompleted}/${targetChecks} effective completion`);
+      console.log(`BWC Progress: ${uniqueCompleted}/${uniquePersonnel.size} unique personnel have BWCs, ${effectiveCompleted}/${targetChecks} effective completion`);
+      console.log(`Same person as ENG/EMT and PO: ${hasDuplicateRole}, target: ${targetChecks}`);
       
       return { 
-        total: targetChecks, // We report 5 as the total expected
+        total: targetChecks,
         completed: effectiveCompleted,
         inProgress: 0, // Set to 0 as we're not tracking in-progress
         pending: effectivePending
@@ -974,28 +996,40 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
-                            Pending Items ({equipmentSectionItems.bwc.pending.length})
+                            Required Positions
                           </h4>
                           <div className="space-y-2">
-                            {equipmentSectionItems.bwc.pending.length > 0 ? (
-                              equipmentSectionItems.bwc.pending.map((item, index) => (
-                                <div key={`bwc-pending-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
-                                  <div className="flex flex-col">
-                                    <div className="flex items-center">
-                                      <div className="h-2 w-2 rounded-full mr-2 bg-red-500" aria-hidden="true"></div>
-                                      <div className="text-sm font-medium">{item.name}</div>
-                                    </div>
-                                    {item.suggestedRole && (
-                                      <div className="mt-1 ml-4 text-xs text-neutral-500 dark:text-neutral-400">
-                                        {item.suggestedRole}
+                            {/* Only display personnel who don't have BWCs assigned yet */}
+                            {(() => {
+                              // Filter to only personnel without BWCs
+                              const remainingPersonnel = bwcPersonnel.filter(person => !person.hasBwc);
+                              
+                              return remainingPersonnel.length > 0 ? (
+                                remainingPersonnel.map((person, index) => (
+                                  <div 
+                                    key={`bwc-personnel-${index}`} 
+                                    className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2"
+                                  >
+                                    <div className="flex flex-col">
+                                      <div className="flex items-center">
+                                        <div className="h-2 w-2 rounded-full mr-2 bg-red-500" aria-hidden="true"></div>
+                                        <div className="text-sm font-medium">{person.personnel}</div>
                                       </div>
-                                    )}
+                                      <div className="mt-1 ml-4 text-xs text-neutral-500 dark:text-neutral-400">
+                                        {person.vehicle} {person.position}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="text-sm text-gray-500 dark:text-neutral-400">No pending items</div>
-                            )}
+                                ))
+                              ) : (
+                                <div className="text-sm text-gray-500 dark:text-neutral-400">All positions have BWCs assigned</div>
+                              );
+                            })()}
+                          </div>
+                          <div className="mt-4 text-xs text-gray-500 dark:text-neutral-400 italic">
+                            Note: {equipmentProgress.bwc.total === 5 
+                              ? "5 BWCs are required as the same person is assigned to both ENG/EMT and PO positions." 
+                              : "6 BWCs are required as different people are assigned to ENG/EMT and PO positions."}
                           </div>
                         </div>
                       </div>
@@ -1224,6 +1258,7 @@ interface ProgressSectionProps {
   pending: number;
   sectionKey?: 'armoury' | 'vehicleFPT' | 'vehicleLPT' | 'bwc';
   isSelected?: boolean;
+  customDescription?: string;
   onSectionClick?: (section: 'armoury' | 'vehicleFPT' | 'vehicleLPT' | 'bwc') => void;
 }
 
@@ -1235,6 +1270,7 @@ const ProgressSection = ({
   pending, 
   sectionKey,
   isSelected,
+  customDescription,
   onSectionClick 
 }: ProgressSectionProps) => {
   const completedPercent = (completed / total) * 100;
@@ -1256,7 +1292,7 @@ const ProgressSection = ({
       )}
       <div className="flex justify-between text-sm dark:text-neutral-300">
         <div className="flex items-center">
-        <span>{title}</span>
+          <span>{title}</span>
           {sectionKey && (
             <ChevronDown className={`h-4 w-4 ml-1 text-neutral-400 transition-transform ${isSelected ? 'rotate-180' : ''}`} />
           )}
@@ -1277,6 +1313,9 @@ const ProgressSection = ({
         <span>{completed} completed</span>
         <span>{pending} pending</span>
       </div>
+      {customDescription && (
+        <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1">{customDescription}</div>
+      )}
     </div>
   )
 }

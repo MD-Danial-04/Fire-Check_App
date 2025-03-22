@@ -52,6 +52,8 @@ export interface BaMasterList {
   date_of_birth: string | null
   hydro_date: string | null
   service_due_date: string | null
+  telemetry_id: string | null
+  remarks: string | null
   created_at: string
   updated_at: string
   is_spare?: boolean
