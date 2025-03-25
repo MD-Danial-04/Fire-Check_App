@@ -481,9 +481,9 @@ export default function ManningList() {
       'BRIDGE': {
         title: 'BRIDGE',
         displayTitle: 'BRIDGE',
-        positions: ['STEERSMAN', 'NAV', 'COMMS'],
+        positions: ['HELMSMAN', 'NAV', 'COMMS'],
         positionMap: {
-          'STEERSMAN': 'STEERSMAN',
+          'HELMSMAN': 'HELMSMAN',
           'NAV': 'NAV',
           'COMMS': 'COMMS'
         }
@@ -896,14 +896,14 @@ export default function ManningList() {
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
-                                STEERSMAN
+                                HELMSMAN
                               </span>
                               <div className="flex flex-col">
                                 <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
-                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'STEERSMAN')?.personnel_name?.split(' ')[0] || '-'}
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'HELMSMAN')?.personnel_name?.split(' ')[0] || '-'}
                                 </span>
                                 <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.1em]">
-                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'STEERSMAN')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
+                                  {vehicleAssignments.find(a => a.section === 'BRIDGE' && a.position === 'HELMSMAN')?.personnel_name?.split(' ').slice(1).join(' ') || ''}
                                 </span>
                               </div>
                             </div>
@@ -924,7 +924,7 @@ export default function ManningList() {
                         </div>
                         {/* Desktop View */}
                         <div className="hidden md:grid grid-cols-4 gap-6">
-                          {['OOW', 'ENG/EMT', 'STEERSMAN', 'NAV SPEC'].map(position => (
+                          {['OOW', 'ENG/EMT', 'HELMSMAN', 'NAV SPEC'].map(position => (
                             <div key={position} className="space-y-4">
                               <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 text-xs tracking-[0.1em] uppercase block font-medium">
                                 {position}

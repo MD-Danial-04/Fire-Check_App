@@ -156,10 +156,11 @@ function PPECheckClient() {
     const rank = name.split(' ')[0].toUpperCase();
     const rankOrder: { [key: string]: number } = {
       // Regulars
-      'LTA': 1,
-      'WO2': 2,
-      'WO1': 3,
-      'SGT3': 4,
+      'CPT': 1,
+      'LTA': 2,
+      'WO2': 3,
+      'WO1': 4,
+      'SGT3': 5,
       // Firefighters
       'SGT': 1,
       'CPL': 2,
