@@ -125,6 +125,7 @@ export default function Dashboard() {
     vehicle: string;
     hasBwc: boolean;
     bwcSerial?: string;
+    required: boolean;
   }[]>([])
 
   useEffect(() => {
@@ -300,12 +301,13 @@ export default function Dashboard() {
 
         // Identify the personnel who need BWCs, including ENG/EMT for MRV811
         const bwcRequiredPositions = [
-          { vehicle: 'MRV811', position: 'Duty Officer' },
-          { vehicle: 'MRV811', position: 'ENG/EMT' },
-          { vehicle: 'LF811', position: 'SC' },
-          { vehicle: 'LF811', position: 'PO' },
-          { vehicle: 'LF812', position: 'SC' },
-          { vehicle: 'LF812', position: 'PO' },
+          { vehicle: 'MRV811', position: 'Duty Officer', required: true },
+          { vehicle: 'MRV811', position: 'ENG/EMT', required: true },
+          { vehicle: 'MRV811', position: 'NAV SPEC', required: false }, // Conditional, depends on personnel assignments
+          { vehicle: 'LF811', position: 'SC', required: true },
+          { vehicle: 'LF811', position: 'PO', required: true },
+          { vehicle: 'LF812', position: 'SC', required: true },
+          { vehicle: 'LF812', position: 'PO', required: true },
         ];
 
         // Find personnel matching these positions
@@ -322,7 +324,8 @@ export default function Dashboard() {
             position: req.position,
             vehicle: req.vehicle,
             hasBwc: false,
-            bwcSerial: undefined
+            bwcSerial: undefined,
+            required: req.required
           };
         });
 
@@ -438,7 +441,7 @@ export default function Dashboard() {
                 role: updatedBwcPersonnel.find(p => p.personnel === item.assigned_to)?.position
               })),
             pending: updatedBwcPersonnel
-              .filter(person => !person.hasBwc)
+              .filter(person => !person.hasBwc && person.required)
               .map(person => ({
                 name: person.personnel,
                 section: 'BWC',
@@ -595,26 +598,34 @@ export default function Dashboard() {
       
       const uniqueCompleted = assignedPersonnel.size;
       
-      // Check if same person is assigned as both ENG/EMT in MRV811 and any PO position
+      // Check if same person is assigned as both ENG/EMT in MRV811 and PO in LF811
       const engEmtPerson = personnelList.find(p => p.vehicle === 'MRV811' && p.position === 'ENG/EMT')?.personnel;
-      const poPersons = personnelList.filter(p => (p.vehicle === 'LF811' || p.vehicle === 'LF812') && p.position === 'PO')
-        .map(p => p.personnel);
+      const lf811PoPerson = personnelList.find(p => p.vehicle === 'LF811' && p.position === 'PO')?.personnel;
       
-      // If the same person is assigned as both ENG/EMT and PO, we need 5 BWCs, otherwise 6
-      const hasDuplicateRole = engEmtPerson && poPersons.includes(engEmtPerson);
-      const targetChecks = hasDuplicateRole ? 5 : 6;
+      // If the same person is assigned as both ENG/EMT and LF811 PO, NAV SPEC needs BWC
+      // Otherwise NAV SPEC doesn't need BWC
+      const sharedRole = engEmtPerson && lf811PoPerson && engEmtPerson === lf811PoPerson;
+      
+      // Update NAV SPEC required status
+      const navSpecIndex = personnelList.findIndex(p => p.vehicle === 'MRV811' && p.position === 'NAV SPEC');
+      if (navSpecIndex >= 0) {
+        personnelList[navSpecIndex].required = sharedRole;
+      }
+      
+      // Always need 6 BWCs total - fixed requirement as specified
+      const targetChecks = 6;
       
       // Calculate effective completion
       const effectiveCompleted = Math.min(uniqueCompleted, targetChecks);
       const effectivePending = targetChecks - effectiveCompleted;
       
       console.log(`BWC Progress: ${uniqueCompleted}/${uniquePersonnel.size} unique personnel have BWCs, ${effectiveCompleted}/${targetChecks} effective completion`);
-      console.log(`Same person as ENG/EMT and PO: ${hasDuplicateRole}, target: ${targetChecks}`);
+      console.log(`Same person as ENG/EMT and LF811 PO: ${sharedRole}, NAV SPEC needs BWC: ${sharedRole}`);
       
       return { 
         total: targetChecks,
         completed: effectiveCompleted,
-        inProgress: 0, // Set to 0 as we're not tracking in-progress
+        inProgress: 0,
         pending: effectivePending
       };
     };
@@ -999,10 +1010,20 @@ export default function Dashboard() {
                             Required Positions
                           </h4>
                           <div className="space-y-2">
-                            {/* Only display personnel who don't have BWCs assigned yet */}
+                            {/* Only display personnel who are required but don't have BWCs assigned yet */}
                             {(() => {
-                              // Filter to only personnel without BWCs
-                              const remainingPersonnel = bwcPersonnel.filter(person => !person.hasBwc);
+                              // Check if ENG/EMT and LF811 PO are the same person
+                              const engEmtPerson = bwcPersonnel.find(p => p.vehicle === 'MRV811' && p.position === 'ENG/EMT')?.personnel;
+                              const lf811PoPerson = bwcPersonnel.find(p => p.vehicle === 'LF811' && p.position === 'PO')?.personnel;
+                              const sharedRole = engEmtPerson && lf811PoPerson && engEmtPerson === lf811PoPerson;
+                              
+                              // Get all required personnel
+                              let requiredPersonnel = bwcPersonnel.filter(person => 
+                                person.required || (person.vehicle === 'MRV811' && person.position === 'NAV SPEC' && sharedRole === true)
+                              );
+                              
+                              // Filter to only required personnel without BWCs
+                              const remainingPersonnel = requiredPersonnel.filter(person => !person.hasBwc);
                               
                               return remainingPersonnel.length > 0 ? (
                                 remainingPersonnel.map((person, index) => (
@@ -1022,14 +1043,17 @@ export default function Dashboard() {
                                   </div>
                                 ))
                               ) : (
-                                <div className="text-sm text-gray-500 dark:text-neutral-400">All positions have BWCs assigned</div>
+                                <div className="text-sm text-gray-500 dark:text-neutral-400">All required positions have BWCs assigned</div>
                               );
                             })()}
                           </div>
                           <div className="mt-4 text-xs text-gray-500 dark:text-neutral-400 italic">
-                            Note: {equipmentProgress.bwc.total === 5 
-                              ? "5 BWCs are required as the same person is assigned to both ENG/EMT and PO positions." 
-                              : "6 BWCs are required as different people are assigned to ENG/EMT and PO positions."}
+                            Note: Always 6 BWCs required. {
+                              bwcPersonnel.find(p => p.vehicle === 'MRV811' && p.position === 'ENG/EMT')?.personnel === 
+                              bwcPersonnel.find(p => p.vehicle === 'LF811' && p.position === 'PO')?.personnel
+                              ? "NAV SPEC needs BWC because the same person is assigned as both MRV811 ENG/EMT and LF811 PO."
+                              : "NAV SPEC doesn't need BWC because different people are assigned to MRV811 ENG/EMT and LF811 PO."
+                            }
                           </div>
                         </div>
                       </div>

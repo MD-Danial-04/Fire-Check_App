@@ -43,6 +43,8 @@ interface GroupedPersonnel {
   vessel_cylinder: string | null;
   lfav_backplate: string | null;
   lfav_cylinder: string | null;
+  vessel_ba_set: string | null;  // For vessel BA sets (SET 1, SET 2, etc.)
+  lfav_ba_set: string | null;    // For LFAV BA sets (SC, FF1, PO, etc.)
 }
 
 // Create a client component that uses useSearchParams
@@ -311,7 +313,9 @@ function PPECheckClient() {
                 vessel_backplate: null,
                 vessel_cylinder: null,
                 lfav_backplate: null,
-                lfav_cylinder: null
+                lfav_cylinder: null,
+                vessel_ba_set: null,
+                lfav_ba_set: null
               };
             }
 
@@ -319,6 +323,15 @@ function PPECheckClient() {
             acc[name].vessel_cylinder = curr.vessel_cylinder || acc[name].vessel_cylinder;
             acc[name].lfav_backplate = curr.lfav_backplate || acc[name].lfav_backplate;
             acc[name].lfav_cylinder = curr.lfav_cylinder || acc[name].lfav_cylinder;
+            
+            // Split BA set assignment based on type
+            if (curr.ba_set_number) {
+              if (curr.ba_set_number.startsWith('SET')) {
+                acc[name].vessel_ba_set = curr.ba_set_number;
+              } else {
+                acc[name].lfav_ba_set = curr.ba_set_number;
+              }
+            }
 
             return acc;
           }, {});
@@ -1187,31 +1200,43 @@ function PPECheckClient() {
                         {
                           key: "vessel_backplate",
                           header: "Vessel Backplate",
-                          className: "w-[15%]",
+                          className: "w-[12%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "vessel_cylinder",
                           header: "Vessel Cylinder",
-                          className: "w-[15%]",
+                          className: "w-[12%]",
+                          render: (value) => value || '-'
+                        },
+                        {
+                          key: "vessel_ba_set",
+                          header: "Vessel Set",
+                          className: "w-[8%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "lfav_backplate",
                           header: "LFAV Backplate",
-                          className: "w-[15%]",
+                          className: "w-[12%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "lfav_cylinder",
                           header: "LFAV Cylinder",
-                          className: "w-[15%]",
+                          className: "w-[12%]",
+                          render: (value) => value || '-'
+                        },
+                        {
+                          key: "lfav_ba_set",
+                          header: "LFAV Set",
+                          className: "w-[8%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "actions",
                           header: "Actions",
-                          className: "w-[20%]",
+                          className: "w-[16%]",
                           render: (_, person) => (
                             <div className="flex flex-row gap-2">
                               <Button
@@ -1275,42 +1300,68 @@ function PPECheckClient() {
                         
                         {/* Equipment Grid */}
                         <div className="space-y-4">
-                          {/* Vessel Row */}
-                          <div className="grid grid-cols-2 gap-6">
-                            <div>
-                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
-                                Vessel Backplate
-                              </div>
-                              <div className="font-medium text-sm">
-                                {person.vessel_backplate || '-'}
-                              </div>
+                          {/* Vessel Section */}
+                          <div>
+                            <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
+                              Vessel Equipment
                             </div>
-                            <div>
-                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
-                                Vessel Cylinder
+                            <div className="grid grid-cols-3 gap-3">
+                              <div>
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                  Backplate
+                                </div>
+                                <div className="font-medium text-sm whitespace-nowrap overflow-x-auto">
+                                  {person.vessel_backplate || '-'}
+                                </div>
                               </div>
-                              <div className="font-medium text-sm">
-                                {person.vessel_cylinder || '-'}
+                              <div>
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                  Cylinder
+                                </div>
+                                <div className="font-medium text-sm whitespace-nowrap overflow-x-auto">
+                                  {person.vessel_cylinder || '-'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                  BA Set
+                                </div>
+                                <div className="font-medium text-sm whitespace-nowrap overflow-x-auto">
+                                  {person.vessel_ba_set || '-'}
+                                </div>
                               </div>
                             </div>
                           </div>
                           
-                          {/* LFAV Row */}
-                          <div className="grid grid-cols-2 gap-6">
-                            <div>
-                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
-                                LFAV Backplate
-                              </div>
-                              <div className="font-medium text-sm">
-                                {person.lfav_backplate || '-'}
-                              </div>
+                          {/* LFAV Section */}
+                          <div>
+                            <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
+                              LFAV Equipment
                             </div>
-                            <div>
-                              <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
-                                LFAV Cylinder
+                            <div className="grid grid-cols-3 gap-3">
+                              <div>
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                  Backplate
+                                </div>
+                                <div className="font-medium text-sm whitespace-nowrap overflow-x-auto">
+                                  {person.lfav_backplate || '-'}
+                                </div>
                               </div>
-                              <div className="font-medium text-sm">
-                                {person.lfav_cylinder || '-'}
+                              <div>
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                  Cylinder
+                                </div>
+                                <div className="font-medium text-sm whitespace-nowrap overflow-x-auto">
+                                  {person.lfav_cylinder || '-'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                  BA Set
+                                </div>
+                                <div className="font-medium text-sm whitespace-nowrap overflow-x-auto">
+                                  {person.lfav_ba_set || '-'}
+                                </div>
                               </div>
                             </div>
                           </div>
