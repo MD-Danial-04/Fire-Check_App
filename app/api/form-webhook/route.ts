@@ -176,6 +176,22 @@ export async function POST(req: Request) {
         }
         
         console.log('Successfully decrypted submission:', JSON.stringify(submission));
+
+        // After successful decryption, add this validation:
+        if (!Array.isArray(submission.responses)) {
+          const errorMsg = 'Decrypted content has invalid format: missing responses array';
+          console.error(errorMsg);
+          await updateWebhookLogStatus(supabase, logId, 'failed', errorMsg);
+          return NextResponse.json({ error: 'Invalid decrypted content format' }, { status: 400 });
+        }
+
+        // Check if we have the expected minimum response count
+        if (submission.responses.length < 3) {
+          const errorMsg = `Decrypted content has too few responses: ${submission.responses.length}`;
+          console.error(errorMsg);
+          await updateWebhookLogStatus(supabase, logId, 'failed', errorMsg);
+          return NextResponse.json({ error: 'Incomplete form submission' }, { status: 400 });
+        }
       } catch (error: any) {
         console.error('Decryption error:', error);
         await updateWebhookLogStatus(supabase, logId, 'failed', `Decryption error: ${error.message}`);
