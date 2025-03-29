@@ -49,8 +49,9 @@ if (FORM_SECRET_KEY) {
 // Your Field IDs (ensure these are correct for your form)
 const FIELD_IDS = {
   name: '6502c44bde2cb10011b4d19e',
-  vessel: '6502d744356d4700127c28e4',
-  lfav: '6502d8862ccd0f00122e8196'
+  vessel: '6502d744356d4700127c28e4', // Likely SCBA Set 1
+  lfav: '6502d8862ccd0f00122e8196',   // Likely SCBA Set 2
+  bwc: '672465bb2d53827806959ada'    // BWC S/N
 } as const;
 
 // Helper for IP Check (Replace with proper CIDR check if needed)
@@ -297,10 +298,9 @@ export async function POST(req: Request) {
     const personName = nameField?.answer;
 
     // Add extraction for other fields if needed
-    const vesselField = responses.find((r: FormField) => r._id === FIELD_IDS.vessel);
-    const vesselEquipment = vesselField?.answer || '';
-    const lfavField = responses.find((r: FormField) => r._id === FIELD_IDS.lfav);
-    const lfavEquipment = lfavField?.answer || '';
+    // Extract BWC S/N instead of BA sets
+    const bwcField = responses.find((r: FormField) => r._id === FIELD_IDS.bwc);
+    const bwcSn = bwcField?.answer || 'N/A'; // Default to N/A if not found
 
     if (!submissionId || !personName) {
       const errorMsg = `Missing required fields after processing: submissionId=${submissionId}, personName=${personName}`;
@@ -310,12 +310,14 @@ export async function POST(req: Request) {
     }
 
     // --- Save Response ---
-    // Pass the necessary extracted data
+    // Pass the necessary extracted data (BWC S/N)
     await saveResponseIdForPerson(supabase, personName, submissionId, {
-      vessel_equipment: vesselEquipment,
-      lfav_equipment: lfavEquipment,
+      bwc_sn: bwcSn // Save BWC S/N instead of BA sets
       // Add other relevant decrypted data if needed
     });
+
+    // --- NEW: Update Equipment Checklist ---
+    await updateEquipmentChecklist(supabase, personName, bwcSn);
 
     // --- Update Log Status ---
     await updateWebhookLogStatus(supabase, logId, isTestMode ? 'test_processed' : 'processed', null);
@@ -343,7 +345,7 @@ async function saveResponseIdForPerson(
     .insert({
       personnel_name: personName,
       response_id: responseId,
-      form_type: 'ppe_check_webhook', // Differentiate from manual/bookmarklet submissions
+      form_type: 'ppe_check', // Differentiate from manual/bookmarklet submissions
       submitted_at: new Date().toISOString(),
       form_data: formData // Store relevant decrypted data
     });
@@ -355,6 +357,47 @@ async function saveResponseIdForPerson(
   }
    console.log(`Saved form response for ${personName} with ID ${responseId}`);
 }
+
+// --- NEW HELPER FUNCTION --- 
+// Function to update the equipment checklist based on BWC assignment
+async function updateEquipmentChecklist(
+  supabase: any, // Replace 'any' with Supabase client type
+  personName: string,
+  bwcSerialNumber: string
+) {
+  // Only proceed if we have a valid BWC Serial Number (not the default 'N/A' or 'NIL')
+  if (!bwcSerialNumber || 
+      bwcSerialNumber === 'N/A' || 
+      bwcSerialNumber.toUpperCase() === 'NIL') { // Added check for NIL
+    console.log('Skipping equipment checklist update: BWC Serial Number is missing, N/A, or NIL.'); // Updated log message
+    return;
+  }
+
+  console.log(`Attempting to update equipment checklist for BWC: ${bwcSerialNumber}, assigned to: ${personName}`);
+
+  const { data, error } = await supabase
+    .from('equipment_checklist')
+    .update({
+      assigned_to: personName,
+      checked: true,
+      // updated_at is handled by trigger, but can be set explicitly if needed:
+      // updated_at: new Date().toISOString(), 
+    })
+    .eq('section', 'BWC') // Target the BWC section
+    .eq('name', bwcSerialNumber) // Match the specific BWC by its serial number (name)
+    .select(); // Optionally select the updated row(s) to confirm
+
+  if (error) {
+    console.error(`Error updating equipment_checklist for BWC ${bwcSerialNumber}:`, error);
+    // Decide if this error should be critical. For now, just log it.
+    // Consider adding specific error handling (e.g., if BWC SN not found vs. DB error)
+  } else if (data && data.length > 0) {
+    console.log(`Successfully updated equipment checklist for BWC ${bwcSerialNumber}. Rows affected: ${data.length}`);
+  } else {
+    console.warn(`Could not find BWC ${bwcSerialNumber} in equipment_checklist to update.`);
+  }
+}
+// --- END NEW HELPER FUNCTION ---
 
 // Adapted logging function - inserts initial log entry
 async function storeWebhookLog(
