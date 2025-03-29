@@ -33,10 +33,16 @@ const formsgClient = formsg({
 
 // Retrieve secret key from environment variables
 const FORM_SECRET_KEY = process.env.FORMSG_SECRET_KEY || '';
-if (!FORM_SECRET_KEY && process.env.NODE_ENV === 'production') {
+if (FORM_SECRET_KEY) {
+  const keyBuffer = Buffer.from(FORM_SECRET_KEY, 'base64');
+  if (keyBuffer.length !== 32) { // 32 bytes = 256 bits
+    console.error('Invalid key length. Expected 32 bytes after base64 decoding');
+    // Consider throwing an error during startup in production
+  }
+} else if (process.env.NODE_ENV === 'production') {
   // Log a critical error in production if the key is missing
   console.error('CRITICAL: FORMSG_SECRET_KEY environment variable is not set.');
-} else if (!FORM_SECRET_KEY) {
+} else {
   console.warn('Warning: FORMSG_SECRET_KEY environment variable is not set. Decryption will fail.');
 }
 
@@ -131,8 +137,16 @@ export async function POST(req: Request) {
     // --- Decryption ---
     if (!body.data || !body.data.encryptedContent) {
       console.warn('Webhook payload missing data.encryptedContent');
+      console.log('Received payload structure:', JSON.stringify(body));
       await updateWebhookLogStatus(supabase, logId, 'failed', 'Missing encrypted content');
       return NextResponse.json({ error: 'Missing encrypted content' }, { status: 400 });
+    }
+
+    // Add validation for encrypted content type
+    if (typeof body.data.encryptedContent !== 'string') {
+      console.error('Invalid encryptedContent type:', typeof body.data.encryptedContent);
+      await updateWebhookLogStatus(supabase, logId, 'failed', 'Invalid encryptedContent format');
+      return NextResponse.json({ error: 'Invalid payload format' }, { status: 400 });
     }
 
     let submission;
@@ -165,15 +179,25 @@ export async function POST(req: Request) {
       }
 
       console.log('Attempting to decrypt with key length:', FORM_SECRET_KEY.length);
+      console.log('Encrypted content length:', body.data.encryptedContent?.length || 0);
       
       try {
-        submission = formsgClient.crypto.decrypt(FORM_SECRET_KEY, body.data);
-        
-        if (!submission) {
-          console.error('Decryption returned null - likely invalid or unable to decrypt content');
-          await updateWebhookLogStatus(supabase, logId, 'failed', 'Decryption returned null');
+        // Check if this is an attachments-enabled form
+        let decrypted: any; // Use 'any' type since SDK types are complex
+        if (body.data.encryptedContent?.startsWith('UEtD')) {
+          decrypted = await formsgClient.crypto.decryptWithAttachments(FORM_SECRET_KEY, body.data);
+        } else {
+          decrypted = await formsgClient.crypto.decrypt(FORM_SECRET_KEY, body.data);
+        }
+
+        if (!decrypted || typeof decrypted !== 'object') {
+          console.error('Decryption returned invalid result:', decrypted);
+          await updateWebhookLogStatus(supabase, logId, 'failed', 'Invalid decryption result');
           return NextResponse.json({ error: 'Failed to decrypt submission' }, { status: 400 });
         }
+
+        // Handle both content types
+        submission = 'responses' in decrypted ? decrypted : decrypted.content;
         
         console.log('Successfully decrypted submission:', JSON.stringify(submission));
 
