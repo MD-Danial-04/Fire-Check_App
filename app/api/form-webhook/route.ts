@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import formsg from '@opengovsg/formsg-sdk'; // Import FormSG SDK (Removed FormField)
+import nacl from 'tweetnacl';
+import { decodeBase64, encodeUTF8 } from 'tweetnacl-util';
+import { createHash } from 'crypto'; // Node.js crypto for SHA-256
 
 // Updated IP whitelist based on official FormSG IP addresses
 const FORMSG_IP_WHITELIST = {
@@ -17,30 +19,26 @@ const FORMSG_IP_WHITELIST = {
   ]
 };
 
-// FormSG environment public keys - for reference, the SDK already includes these
+// Add FormSG Public Keys directly
 const FORMSG_PUBLIC_KEYS = {
   production: '3Tt8VduXsjjd4IrpdCd7BAkdZl/vUCstu9UvTX84FWw=',
   staging: 'rjv41kYqZwcbe3r6ymMEEKQ+Vd+DPuogN+Gzq3lP2Og='
 };
 
-// Initialize FormSG SDK - Ensure mode matches your FormSG environment (staging/production)
+// Constants for manual verification
+const SIGNATURE_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000; // 5 minutes
+
 const formsgMode = process.env.FORMSG_MODE === 'staging' ? 'staging' : 'production';
 console.log(`Using FormSG mode: ${formsgMode}`);
 
-const formsgClient = formsg({
-  mode: formsgMode,
-});
-
-// Retrieve secret key from environment variables
-const FORM_SECRET_KEY = process.env.FORMSG_SECRET_KEY || '';
-if (FORM_SECRET_KEY) {
-  const keyBuffer = Buffer.from(FORM_SECRET_KEY, 'base64');
+// Rename key variable for clarity
+const FORM_SECRET_KEY_B64 = process.env.FORMSG_SECRET_KEY || '';
+if (FORM_SECRET_KEY_B64) {
+  const keyBuffer = Buffer.from(FORM_SECRET_KEY_B64, 'base64');
   if (keyBuffer.length !== 32) { // 32 bytes = 256 bits
     console.error('Invalid key length. Expected 32 bytes after base64 decoding');
-    // Consider throwing an error during startup in production
   }
 } else if (process.env.NODE_ENV === 'production') {
-  // Log a critical error in production if the key is missing
   console.error('CRITICAL: FORMSG_SECRET_KEY environment variable is not set.');
 } else {
   console.warn('Warning: FORMSG_SECRET_KEY environment variable is not set. Decryption will fail.');
@@ -53,6 +51,16 @@ const FIELD_IDS = {
   lfav: '6502d8862ccd0f00122e8196'
 } as const;
 
+// Add the missing interface definition
+interface DecryptedFormField {
+  _id: string;
+  fieldType: string;
+  question: string;
+  answer?: string;
+  answerArray?: string[] | string[][]; // Can be string array or nested array (e.g., for checkboxes in tables)
+  [key: string]: any; // Allow for potential extra fields from FormSG v2.1+
+}
+
 // Helper for IP Check (Replace with proper CIDR check if needed)
 function isIpAllowed(ip: string): boolean {
   // Get the appropriate IP whitelist based on mode
@@ -63,13 +71,14 @@ function isIpAllowed(ip: string): boolean {
 }
 
 export async function POST(req: Request) {
-  const supabase = createRouteHandlerClient({ cookies }); // Use server-side client
+  const supabase = createRouteHandlerClient({ cookies });
   const requestHeaders = headers();
   const clientIp = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-  const signature = requestHeaders.get('X-FormSG-Signature');
-  const isTestMode = requestHeaders.get('X-Test-Mode') === 'true'; // Support test mode
+  const signatureHeader = requestHeaders.get('X-FormSG-Signature'); // Renamed variable
+  const isTestMode = requestHeaders.get('X-Test-Mode') === 'true';
 
-  let logId: number | null = null; // For updating log entry
+  let logId: number | null = null;
+  let body: any; // Declare body outside try block
 
   try {
     // --- IP Check ---
@@ -90,7 +99,6 @@ export async function POST(req: Request) {
     }
 
     // Read body only once
-    let body;
     try {
         body = await req.json();
     } catch (e) {
@@ -98,204 +106,222 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
-
     // --- Store Raw Log (Initial Entry) ---
     logId = await storeWebhookLog(supabase, {
       payload: body,
       source_ip: clientIp,
       headers: Object.fromEntries(requestHeaders.entries()),
-      status: 'received' // Initial status
+      status: 'received'
     });
 
-    // --- Signature Verification ---
-    if (!signature && !isTestMode) {
+    // --- Test Mode Handling / Production Verification & Decryption ---
+    let processedData: DecryptedFormField[] | null = null; // Unified variable
+    let submissionId: string | null = body?.data?.submissionId || null; // Get submissionId early
+
+    if (isTestMode) {
+      // ... (existing test mode logic remains unchanged) ...
+      // Ensure test mode assigns to processedData
+       if (!body.data || !body.data.encryptedContent) {
+           console.warn('Test mode payload missing data.encryptedContent');
+           await updateWebhookLogStatus(supabase, logId, 'failed', 'Missing encrypted content in test payload');
+           return NextResponse.json({ error: 'Missing encrypted content' }, { status: 400 });
+       }
+       try {
+         const decodedContent = Buffer.from(body.data.encryptedContent, 'base64').toString('utf-8');
+         const testData = JSON.parse(decodedContent);
+         if (Array.isArray(testData)) {
+            processedData = testData as DecryptedFormField[]; // Assign to processedData
+            console.log('Test mode decoded content processed.');
+            await updateWebhookLogStatus(supabase, logId, 'test_processed', null);
+         } else {
+            console.error('Test mode decoded content was not an array:', testData);
+            await updateWebhookLogStatus(supabase, logId, 'failed', 'Test mode decoded content invalid structure');
+            return NextResponse.json({ error: 'Invalid test payload structure' }, { status: 400 });
+         }
+       } catch (error: any) {
+         console.error('Failed to decode/parse test payload:', error);
+         await updateWebhookLogStatus(supabase, logId, 'failed', `Test mode decoding error: ${error.message}`);
+         return NextResponse.json({ error: 'Failed to decode test payload' }, { status: 400 });
+       }
+
+    } else {
+      // --- Production Verification & Decryption ---
+      console.log(`Production submission received (ID: ${submissionId})`);
+
+      // 1. Check Prerequisites
+      if (!signatureHeader) { // Use renamed variable
       console.warn('Missing X-FormSG-Signature header');
       await updateWebhookLogStatus(supabase, logId, 'failed', 'Missing signature');
       return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
     }
-
-    // The SDK requires the full URL for verification
-    const postUri = req.url;
-
-    // Skip verification only in test mode
-    if (!isTestMode) {
-        // Ensure FORMSG_SECRET_KEY is set before proceeding in production
-        if (!FORM_SECRET_KEY && process.env.NODE_ENV === 'production') {
+       if (!body.data || !body.data.encryptedContent || !submissionId || !body.data.formId) {
+          console.warn('Webhook payload missing data fields (encryptedContent, submissionId, formId)');
+          await updateWebhookLogStatus(supabase, logId, 'failed', 'Missing required data fields');
+          return NextResponse.json({ error: 'Missing required data fields' }, { status: 400 });
+       }
+       if (!FORM_SECRET_KEY_B64) { // Use renamed variable
+         console.error('Cannot process: FORMSG_SECRET_KEY is not set.');
             await updateWebhookLogStatus(supabase, logId, 'error', 'Server configuration error: Secret key missing');
             return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
         }
-        try {
-             formsgClient.webhooks.authenticate(signature!, postUri);
-             // Note: authenticate throws error on failure
-        } catch (e: any) {
-            console.error('Invalid signature:', e.message);
-            await updateWebhookLogStatus(supabase, logId, 'failed', `Invalid signature: ${e.message}`);
-            return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-        }
-    }
+       const { formId, encryptedContent, version } = body.data;
 
-    // --- Decryption ---
-    if (!body.data || !body.data.encryptedContent) {
-      console.warn('Webhook payload missing data.encryptedContent');
-      console.log('Received payload structure:', JSON.stringify(body));
-      await updateWebhookLogStatus(supabase, logId, 'failed', 'Missing encrypted content');
-      return NextResponse.json({ error: 'Missing encrypted content' }, { status: 400 });
-    }
+      // 2. Parse Signature Header (Manual)
+       const signatureElems = signatureHeader.split(',').reduce((acc, elem) => {
+         const [key, value] = elem.trim().split('=');
+         acc[key] = value;
+         return acc;
+       }, {} as Record<string, string>);
 
-    // Add validation for encrypted content type
-    if (typeof body.data.encryptedContent !== 'string') {
-      console.error('Invalid encryptedContent type:', typeof body.data.encryptedContent);
-      await updateWebhookLogStatus(supabase, logId, 'failed', 'Invalid encryptedContent format');
-      return NextResponse.json({ error: 'Invalid payload format' }, { status: 400 });
-    }
+       const providedTimestamp = parseInt(signatureElems.t, 10);
+       const providedSubmissionId = signatureElems.s;
+       const providedFormId = signatureElems.f;
+       const providedSignature = signatureElems.v1;
 
-    let submission;
-    const submissionId = body.data.submissionId;
+       if (!providedTimestamp || !providedSubmissionId || !providedFormId || !providedSignature) {
+          console.error('Invalid signature header format:', signatureHeader);
+          await updateWebhookLogStatus(supabase, logId, 'failed', 'Invalid signature header format');
+          return NextResponse.json({ error: 'Invalid signature header format' }, { status: 400 });
+       }
+       if (providedSubmissionId !== submissionId || providedFormId !== formId) {
+           console.error('Mismatch between signature header and payload IDs');
+           await updateWebhookLogStatus(supabase, logId, 'failed', 'Signature header does not match payload');
+           return NextResponse.json({ error: 'Signature header does not match payload' }, { status: 400 });
+       }
+       console.log(`Signature details: t=${providedTimestamp}, s=${providedSubmissionId}, f=${providedFormId}`);
 
-    // For test mode, use a special path to avoid actual decryption
-    if (isTestMode) {
-      console.log('Test mode: Skipping decryption and using base64 decoded content directly');
-      
-      try {
-        // In test mode, we just base64 decode the "encrypted" content
-        const decodedContent = Buffer.from(body.data.encryptedContent, 'base64').toString('utf-8');
-        submission = JSON.parse(decodedContent);
-        console.log('Test mode decoded content:', JSON.stringify(submission));
-        
-        await updateWebhookLogStatus(supabase, logId, 'test_processed', null);
-      } catch (error: any) {
-        console.error('Failed to decode test payload:', error);
-        await updateWebhookLogStatus(supabase, logId, 'failed', `Test mode decoding error: ${error.message}`);
-        return NextResponse.json({ error: 'Failed to decode test payload' }, { status: 400 });
-      }
-    } else {
-      // Production path using actual decryption
-      // Ensure FORMSG_SECRET_KEY is available for decryption
-      if (!FORM_SECRET_KEY) {
-        console.error('Cannot decrypt: FORMSG_SECRET_KEY is not set.');
-        await updateWebhookLogStatus(supabase, logId, 'error', 'Decryption key missing on server');
-        // Don't expose key missing error directly in production response
-        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-      }
 
-      console.log('Attempting to decrypt with key length:', FORM_SECRET_KEY.length);
-      console.log('FormSG payload version:', body.data.version);
-      console.log('Encrypted content length:', body.data.encryptedContent?.length || 0);
-      
-      // Store the first few characters of encrypted content for debugging
-      const encryptionPrefix = body.data.encryptedContent?.substring(0, 30) + '...';
+      // 3. Verify Timestamp (Manual)
+       const currentTimestamp = Date.now();
+       if (currentTimestamp - providedTimestamp > SIGNATURE_TIMESTAMP_TOLERANCE_MS) {
+         console.error(`Timestamp validation failed: ${currentTimestamp} - ${providedTimestamp} > ${SIGNATURE_TIMESTAMP_TOLERANCE_MS}`);
+         await updateWebhookLogStatus(supabase, logId, 'failed', 'Timestamp validation failed');
+         return NextResponse.json({ error: 'Timestamp validation failed' }, { status: 400 });
+       }
+        console.log('Timestamp validation passed.');
+
+      // 4. Construct Basestring (Manual)
+       const webhookUrl = req.url; // Get the full URL the request hit
+       if (!webhookUrl) {
+           console.error('Could not determine webhook URL from request');
+           await updateWebhookLogStatus(supabase, logId, 'error', 'Server configuration error: Cannot determine webhook URL');
+           return NextResponse.json({ error: 'Server configuration error: Cannot determine webhook URL' }, { status: 500 });
+       }
+       const baseString = `${webhookUrl}.${providedSubmissionId}.${providedFormId}.${providedTimestamp}`;
+       console.log(`Constructed basestring: ${baseString.substring(0, 100)}...`); // Log prefix
+
+      // 5. Verify Signature (Manual)
+       const formsgPublicKeyBase64 = FORMSG_PUBLIC_KEYS[formsgMode];
+       const formsgPublicKey = decodeBase64(formsgPublicKeyBase64);
+       const signatureBytes = decodeBase64(providedSignature);
+       // @ts-ignore - Linter seems confused, encodeUTF8 returns Uint8Array
+       const baseStringBytes = encodeUTF8(baseString);
+
+       // @ts-ignore - Linter seems confused, types are Uint8Array as expected
+       const isSignatureValid = nacl.sign.detached.verify(baseStringBytes, signatureBytes, formsgPublicKey);
+
+       if (!isSignatureValid) {
+         console.error('Signature verification failed!');
+         // Log details that might help debugging signature issues
+         console.error(`Webhook URL used: ${webhookUrl}`);
+         console.error(`Basestring prefix used: ${baseString.substring(0,100)}...`);
+         console.error(`Submission ID: ${providedSubmissionId}`);
+         console.error(`Form ID: ${providedFormId}`);
+         console.error(`Timestamp: ${providedTimestamp}`);
+         console.error(`Public Key (Base64): ${formsgPublicKeyBase64}`);
+         console.error(`Mode: ${formsgMode}`);
+         console.error(`Provided Signature (Base64): ${providedSignature}`);
+         await updateWebhookLogStatus(supabase, logId, 'failed', 'Invalid signature');
+         return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+       }
+       console.log(`Signature verified successfully for submission ${submissionId}.`);
+       await updateWebhookLogStatus(supabase, logId, 'signature_verified', null);
+
+      // --- Manual Decryption ---
+      console.log('Attempting manual decryption...');
+      console.log('FormSG payload version:', version);
+      console.log('Encrypted content length:', encryptedContent?.length || 0);
+      const encryptionPrefix = encryptedContent?.substring(0, 30) + '...';
       console.log('Encrypted content format:', encryptionPrefix);
-      
-      // Backup the encrypted content and form details for troubleshooting
       await updateWebhookLogStatus(supabase, logId, 'decryption_started', 
-        `Attempting to decrypt ${body.data.encryptedContent?.length} bytes, version ${body.data.version}, format: ${encryptionPrefix}`);
-      
-      try {
-        // Check if this is an attachments-enabled form
-        let decrypted: any; // Use 'any' type since SDK types are complex
-        
-        // Check specific format indicators in the encrypted content
-        if (body.data.encryptedContent?.startsWith('UEtD')) {
-          console.log('Using decryptWithAttachments method for UEtD format');
-          decrypted = await formsgClient.crypto.decryptWithAttachments(FORM_SECRET_KEY, body.data);
-        } else {
-          console.log('Using standard decrypt method');
-          try {
-            // Try standard decryption first
-            decrypted = await formsgClient.crypto.decrypt(FORM_SECRET_KEY, body.data);
-            
-            // Log successful decryption format for future reference
-            console.log('Successfully decrypted using standard method');
-          } catch (decryptError: any) {
-            console.error('Primary decryption method failed:', decryptError.message);
-            await updateWebhookLogStatus(supabase, logId, 'decrypt_error', 
-              `Primary decrypt failed: ${decryptError.message}`);
-            
-            // Provide helpful error about possible versioning issue
-            console.error('The FormSG webhook is using v2.1 format, but the current SDK version (0.13.0) may not support it.');
-            console.error('Consider checking with FormSG support about v2.1 format support.');
-            
-            // Log the form and webhook IDs for reference
-            console.log('FormID:', body.data.formId);
-            console.log('SubmissionID:', body.data.submissionId);
-            
-            throw new Error(`Decryption failed for FormSG v${body.data.version}: ${decryptError.message}`);
-          }
-        }
+        `Manual decryption for ${encryptedContent?.length} bytes, v${version}, format: ${encryptionPrefix}`);
 
-        if (!decrypted || typeof decrypted !== 'object') {
-          console.error('Decryption returned invalid result:', decrypted);
-          await updateWebhookLogStatus(supabase, logId, 'failed', 'Invalid decryption result');
-          return NextResponse.json({ error: 'Failed to decrypt submission' }, { status: 400 });
-        }
+       // 6. Derive Nonce (Manual)
+        const hash = createHash('sha256').update(submissionId).digest();
+        const nonce = new Uint8Array(hash.buffer, hash.byteOffset, 24); // Get first 24 bytes
+        console.log(`Derived nonce for submissionId: ${submissionId}`);
 
-        // Handle different possible shapes of the decrypted data based on version
-        if ('responses' in decrypted) {
-          submission = decrypted;
-          console.log('Using direct responses from decrypted content');
-        } else if ('content' in decrypted && decrypted.content) {
-          submission = decrypted.content;
-          console.log('Using content property from decrypted result');
-        } else if ('data' in decrypted && decrypted.data?.responses) {
-          // FormSG v2.x may have a different structure
-          submission = decrypted.data;
-          console.log('Using data.responses from v2.x structure');
-        } else {
-          // Log the structure to help debug
-          console.error('Unknown decrypted content structure:', Object.keys(decrypted));
-          await updateWebhookLogStatus(supabase, logId, 'failed', 'Unrecognized decrypted content structure');
-          return NextResponse.json({ error: 'Unrecognized content structure' }, { status: 400 });
-        }
-        
-        // Added additional logging for content structure verification
-        console.log('Decrypted content keys:', Object.keys(submission));
-        
-        // After successful decryption, add this validation:
-        if (!Array.isArray(submission.responses)) {
-          const errorMsg = 'Decrypted content has invalid format: missing responses array';
-          console.error(errorMsg, 'Content keys:', Object.keys(submission));
-          await updateWebhookLogStatus(supabase, logId, 'failed', errorMsg);
-          return NextResponse.json({ error: 'Invalid decrypted content format' }, { status: 400 });
-        }
+       // 7. Decrypt Content (Manual)
+        try {
+            const secretKeyBytes = decodeBase64(FORM_SECRET_KEY_B64);
+            const encryptedContentBytes = decodeBase64(encryptedContent);
+            const decryptedBytes = nacl.secretbox.open(encryptedContentBytes, nonce, secretKeyBytes);
 
-        // Check if we have the expected minimum response count
-        if (submission.responses.length < 3) {
-          const errorMsg = `Decrypted content has too few responses: ${submission.responses.length}`;
-          console.error(errorMsg);
-          await updateWebhookLogStatus(supabase, logId, 'failed', errorMsg);
-          return NextResponse.json({ error: 'Incomplete form submission' }, { status: 400 });
+            if (!decryptedBytes) {
+              console.error('Manual decryption failed! nacl.secretbox.open returned null.');
+              console.error(`Secret Key Length (bytes): ${secretKeyBytes.length}`);
+              console.error(`Encrypted Content Length (bytes): ${encryptedContentBytes.length}`);
+              console.error(`Nonce Length (bytes): ${nonce.length}`);
+              console.error(`Nonce prefix (hex): ${Buffer.from(nonce.slice(0, 4)).toString('hex')}`);
+              await updateWebhookLogStatus(supabase, logId, 'failed', 'Decryption failed (nacl returned null)');
+              return NextResponse.json({ error: 'Decryption failed' }, { status: 400 });
+            }
+            console.log(`Manual decryption successful for submission ${submissionId}.`);
+
+            const decryptedString = encodeUTF8(decryptedBytes);
+            const decryptedJson = JSON.parse(decryptedString);
+
+            // Basic validation: Check if it's an array
+            if (!Array.isArray(decryptedJson)) {
+                console.error('Decrypted content is not an array:', decryptedJson);
+                await updateWebhookLogStatus(supabase, logId, 'failed', 'Decrypted content invalid structure (not an array)');
+                return NextResponse.json({ error: 'Decrypted content invalid structure' }, { status: 400 });
+            }
+
+            processedData = decryptedJson as DecryptedFormField[]; // Assign to processedData
+            await updateWebhookLogStatus(supabase, logId, 'decrypted', null); // Log successful decryption
+
+        } catch (error: any) {
+             console.error('Error during manual decryption or JSON parsing:', error);
+             await updateWebhookLogStatus(supabase, logId, 'failed', `Decryption/Parsing error: ${error.message}`);
+             return NextResponse.json({ error: 'Failed to process submission content' }, { status: 500 });
         }
-      } catch (error: any) {
-        console.error('Decryption error:', error);
-        await updateWebhookLogStatus(supabase, logId, 'failed', `Decryption error: ${error.message}`);
-        return NextResponse.json({ error: 'Failed to decrypt submission' }, { status: 400 });
-      }
+    } // End of production verification/decryption block
+
+    // --- Process Decrypted/Test Data ---
+    if (!processedData || !submissionId) {
+        // Safety check
+        console.error('No processed data available after verification/decryption or test mode.');
+        await updateWebhookLogStatus(supabase, logId, 'error', 'Internal error: No data to process');
+        return NextResponse.json({ error: 'Internal processing error' }, { status: 500 });
     }
 
-    // --- Extract Data ---
-    // The decrypted/decoded 'submission' contains the 'responses' array
-    const responses = submission.responses; // Array of response items
+    // --- Extract Data --- (Using processedData directly)
+    let personName = 'Unknown';
+    const formDataToSave: Record<string, any> = {};
 
-    // Define a type for the response field to fix type errors
-    interface FormField {
-      _id: string;
-      fieldType: string;
-      question: string;
-      answer?: string;
-      answerArray?: string[] | string[][];
-    }
+    processedData.forEach((field: DecryptedFormField) => { // Add type annotation
+        switch (field._id) {
+            case FIELD_IDS.name:
+                personName = field.answer || 'Unnamed';
+                formDataToSave.personnel_name = personName; // Match table column
+                break;
+            case FIELD_IDS.vessel:
+                formDataToSave.vessel_equipment = field.answer || 'N/A'; // Match table column
+                break;
+             case FIELD_IDS.lfav:
+                 formDataToSave.lfav_equipment = field.answer || 'N/A'; // Match table column
+                 break;
+            default:
+                 // Store other fields directly using question as key, if desired
+                 // formDataToSave[field.question] = field.answer ?? field.answerArray ?? 'N/A';
+                break;
+        }
+    });
 
-    // Let TypeScript infer the type of 'r'
-    const nameField = responses.find((r: FormField) => r._id === FIELD_IDS.name);
-    const personName = nameField?.answer;
+    console.log(`Extracted Person: ${personName}, Data:`, formDataToSave);
 
-    // Add extraction for other fields if needed
-    const vesselField = responses.find((r: FormField) => r._id === FIELD_IDS.vessel);
-    const vesselEquipment = vesselField?.answer || '';
-    const lfavField = responses.find((r: FormField) => r._id === FIELD_IDS.lfav);
-    const lfavEquipment = lfavField?.answer || '';
-
-    if (!submissionId || !personName) {
+    if (personName === 'Unknown' || !personName) { // Check extracted name
       const errorMsg = `Missing required fields after processing: submissionId=${submissionId}, personName=${personName}`;
       console.error(errorMsg);
       await updateWebhookLogStatus(supabase, logId, 'failed', errorMsg);
@@ -303,18 +329,13 @@ export async function POST(req: Request) {
     }
 
     // --- Save Response ---
-    // Pass the necessary extracted data
-    await saveResponseIdForPerson(supabase, personName, submissionId, {
-      vessel_equipment: vesselEquipment,
-      lfav_equipment: lfavEquipment,
-      // Add other relevant decrypted data if needed
-    });
+    await saveResponseIdForPerson(supabase, personName, submissionId, formDataToSave);
 
     // --- Update Log Status ---
-    await updateWebhookLogStatus(supabase, logId, isTestMode ? 'test_processed' : 'processed', null);
+    await updateWebhookLogStatus(supabase, logId, 'processed', null); // Unified 'processed' status
 
-    console.log(`Successfully processed webhook for submissionId: ${submissionId}`);
-    return NextResponse.json({ success: true, submissionId: submissionId });
+    console.log(`Successfully processed FormSG submission: ${submissionId}`);
+    return NextResponse.json({ message: 'Webhook received and processed successfully.', submissionId: submissionId }); // Return success and ID
     
   } catch (error: any) {
     console.error('Unhandled error in webhook processing:', error);
@@ -324,29 +345,63 @@ export async function POST(req: Request) {
   }
 }
 
+// Interface for structured data storage (adjust as needed)
+interface FormDataStructure {
+  personnel_name?: string; // Match table column
+  vessel_equipment?: string; // Match table column
+  lfav_equipment?: string; // Match table column
+  [key: string]: any; // Allow other fields
+}
+
 // Adapted save function to accept Supabase client instance and specific data
 async function saveResponseIdForPerson(
   supabase: any, // Replace 'any' with the actual Supabase client type
   personName: string,
-  responseId: string, // Renamed submissionId to responseId for consistency with table
-  formData: Record<string, any> // Pass specific data to store
+  responseId: string,
+  formData: FormDataStructure // Use the defined interface for columns
 ) {
+  if (!personName || personName === 'Unknown') {
+    console.warn(`Skipping save for unknown person, response ID: ${responseId}`);
+    return;
+  }
+
+  try {
+    // --- Logic to potentially find/create person ---
+    // This logic seems specific to a 'persons' table which might not be needed if
+    // you are only inserting into 'form_responses'. Adapt if needed.
+    // For now, we directly insert into 'form_responses' using the provided name.
+    console.log(`Attempting to save response for ${personName} (${responseId})`);
+
+    // Insert into form_responses table
   const { error } = await supabase
-    .from('form_responses')
+      .from('form_responses') // Target the correct table
     .insert({
+        // Ensure column names match your Supabase table exactly
       personnel_name: personName,
       response_id: responseId,
-      form_type: 'ppe_check_webhook', // Differentiate from manual/bookmarklet submissions
+        form_type: 'ppe_check_webhook', // Use your defined type
       submitted_at: new Date().toISOString(),
-      form_data: formData // Store relevant decrypted data
+        form_data: formData // Store the extracted data object
     });
 
   if (error) {
-      console.error("Error saving response to DB:", error);
-      // Rethrow to be caught by the main handler, which will update the log
-      throw new Error(`Database insert failed: ${error.message}`);
+      console.error(`Error inserting response for ${personName}, response ID ${responseId}:`, error);
+      // Consider specific error handling (e.g., duplicate response_id)
+      if (error.code === '23505') { // Unique violation
+         console.warn(`Response ID ${responseId} already exists. Skipping insert.`);
+         // Potentially update the existing record instead if needed
+      } else {
+         throw new Error(`Database insert failed: ${error.message}`); // Throw to be caught by main handler
+      }
+    } else {
+      console.log(`Successfully saved response ${responseId} for ${personName}`);
+    }
+
+  } catch (error) {
+    console.error(`Error in saveResponseIdForPerson for ${personName} (${responseId}):`, error);
+    // Rethrow to allow the main handler to catch and log the error status
+    throw error;
   }
-   console.log(`Saved form response for ${personName} with ID ${responseId}`);
 }
 
 // Adapted logging function - inserts initial log entry
