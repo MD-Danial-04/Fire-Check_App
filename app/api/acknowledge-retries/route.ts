@@ -7,7 +7,7 @@ import { cookies } from 'next/headers';
 // unique submission ID to prevent further processing through idempotency
 
 export async function GET(req: Request) {
-  // Only allowed in development/staging, not in production
+  // Only allowed in development/staging, not in production by default
   if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_RETRY_ACKNOWLEDGMENT) {
     return NextResponse.json({ 
       error: 'This endpoint is disabled in production for security reasons' 
@@ -16,6 +16,9 @@ export async function GET(req: Request) {
   
   const url = new URL(req.url);
   const password = url.searchParams.get('password');
+  const page = parseInt(url.searchParams.get('page') || '0', 10);
+  const pageSize = parseInt(url.searchParams.get('limit') || '20', 10); // Reduced from 100 to 20
+  const minDays = parseInt(url.searchParams.get('days') || '2', 10); // Default to last 2 days only
   
   // Basic security check - require a password parameter
   if (!password || password !== process.env.ADMIN_PASSWORD) {
@@ -30,17 +33,26 @@ export async function GET(req: Request) {
     acknowledged: 0,
     already_processed: 0,
     errors: 0,
+    skipped: 0,
     details: [] as any[]
   };
   
   try {
+    // Create date range for filtering (default to last 2 days)
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - minDays);
+    
     // Get recent webhook logs with valid payload structure
+    // Apply more specific filters to reduce the number of logs to process
     const { data: webhookLogs, error: logsError } = await supabase
       .from('webhook_logs')
-      .select('id, payload, status')
+      .select('id, payload, status, created_at')
       .not('payload', 'is', null)
+      .gt('created_at', startDate.toISOString())
+      .not('status', 'eq', 'processed') // Don't process already successful webhooks
+      .not('status', 'eq', 'acknowledged_retroactively') // Skip already acknowledged
       .order('created_at', { ascending: false })
-      .limit(100); // Adjust as needed
+      .range(page * pageSize, (page + 1) * pageSize - 1); // Use range-based pagination
     
     if (logsError) {
       console.error('Error fetching webhook logs:', logsError);
@@ -48,42 +60,52 @@ export async function GET(req: Request) {
     }
     
     if (!webhookLogs || webhookLogs.length === 0) {
-      return NextResponse.json({ message: 'No webhook logs found' }, { status: 200 });
+      return NextResponse.json({ 
+        message: 'No webhook logs found that need acknowledgment',
+        page,
+        pageSize,
+        minDays
+      }, { status: 200 });
     }
     
     results.found = webhookLogs.length;
+    console.log(`Processing ${results.found} logs from page ${page}`);
+    
+    // Get all existing submissions in one query to avoid multiple DB calls
+    const formIds = webhookLogs
+      .map(log => log.payload?.data?.submissionId)
+      .filter(Boolean);
+      
+    const { data: existingResponses, error: existingError } = await supabase
+      .from('form_responses')
+      .select('response_id')
+      .in('response_id', formIds);
+      
+    if (existingError) {
+      console.error('Error checking existing responses:', existingError);
+      return NextResponse.json({ error: 'Failed to check existing responses' }, { status: 500 });
+    }
+    
+    // Create a Set of existing submission IDs for fast lookup
+    const existingSubmissionIds = new Set(
+      (existingResponses || []).map(r => r.response_id)
+    );
     
     // Process each webhook log
     for (const log of webhookLogs) {
       try {
         // Skip logs without proper payload structure
         if (!log.payload?.data?.submissionId) {
-          results.details.push({
-            logId: log.id,
-            status: 'skipped',
-            reason: 'Missing submissionId in payload'
-          });
+          results.skipped++;
           continue;
         }
         
         const submissionId = log.payload.data.submissionId;
         const formId = log.payload.data.formId || 'unknown';
         
-        // Check if this submission is already in form_responses
-        const { data: existingResponse } = await supabase
-          .from('form_responses')
-          .select('id')
-          .eq('response_id', submissionId)
-          .maybeSingle();
-        
-        if (existingResponse) {
+        // Check if this submission is already in form_responses using our pre-fetched set
+        if (existingSubmissionIds.has(submissionId)) {
           results.already_processed++;
-          results.details.push({
-            logId: log.id,
-            submissionId,
-            status: 'already_acknowledged',
-            formId
-          });
           continue;
         }
         
@@ -114,14 +136,8 @@ export async function GET(req: Request) {
         }
         
         results.acknowledged++;
-        results.details.push({
-          logId: log.id,
-          submissionId,
-          status: 'acknowledged',
-          formId
-        });
         
-        // Optionally update the webhook log status
+        // Update the webhook log status (if needed, consider removing to save time)
         await supabase
           .from('webhook_logs')
           .update({ status: 'acknowledged_retroactively' })
@@ -137,15 +153,28 @@ export async function GET(req: Request) {
       }
     }
     
+    // Only return detailed results if a small number processed
+    const detailsToReturn = results.details.length <= 10 ? results.details : 
+      [...results.details.slice(0, 5), '...more...', ...results.details.slice(-5)];
+    
+    const hasMore = webhookLogs.length === pageSize;
+    
     return NextResponse.json({ 
       success: true,
       summary: {
         webhooks_found: results.found,
         submissions_acknowledged: results.acknowledged,
         already_processed: results.already_processed,
+        skipped: results.skipped,
         errors: results.errors
       },
-      details: results.details
+      pagination: {
+        page,
+        pageSize,
+        hasMore
+      },
+      nextPage: hasMore ? `/api/acknowledge-retries?password=${password}&page=${page + 1}&limit=${pageSize}&days=${minDays}` : null,
+      details: detailsToReturn
     });
     
   } catch (error: any) {
