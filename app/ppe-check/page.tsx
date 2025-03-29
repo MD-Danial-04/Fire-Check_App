@@ -25,6 +25,7 @@ import BookmarkletInstructions from '@/components/BookmarkLetInstructions';
 import { useSearchParams } from 'next/navigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getSupabaseClient, cleanupAllChannels, retryWithExponentialBackoff, trackChannel, untrackChannel, resetSupabaseClient } from '@/lib/supabase-client';
+import { WebhookMonitor } from '@/components/WebhookMonitor';
 
 interface Personnel {
   id: string;
@@ -1713,6 +1714,9 @@ function PPECheckClient() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Conditionally render the WebhookMonitor only in development */}
+        {process.env.NODE_ENV === 'development' && <WebhookMonitor />}
       </div>
     </div>
   );
