@@ -179,15 +179,48 @@ export async function POST(req: Request) {
       }
 
       console.log('Attempting to decrypt with key length:', FORM_SECRET_KEY.length);
+      console.log('FormSG payload version:', body.data.version);
       console.log('Encrypted content length:', body.data.encryptedContent?.length || 0);
+      
+      // Store the first few characters of encrypted content for debugging
+      const encryptionPrefix = body.data.encryptedContent?.substring(0, 30) + '...';
+      console.log('Encrypted content format:', encryptionPrefix);
+      
+      // Backup the encrypted content and form details for troubleshooting
+      await updateWebhookLogStatus(supabase, logId, 'decryption_started', 
+        `Attempting to decrypt ${body.data.encryptedContent?.length} bytes, version ${body.data.version}, format: ${encryptionPrefix}`);
       
       try {
         // Check if this is an attachments-enabled form
         let decrypted: any; // Use 'any' type since SDK types are complex
+        
+        // Check specific format indicators in the encrypted content
         if (body.data.encryptedContent?.startsWith('UEtD')) {
+          console.log('Using decryptWithAttachments method for UEtD format');
           decrypted = await formsgClient.crypto.decryptWithAttachments(FORM_SECRET_KEY, body.data);
         } else {
-          decrypted = await formsgClient.crypto.decrypt(FORM_SECRET_KEY, body.data);
+          console.log('Using standard decrypt method');
+          try {
+            // Try standard decryption first
+            decrypted = await formsgClient.crypto.decrypt(FORM_SECRET_KEY, body.data);
+            
+            // Log successful decryption format for future reference
+            console.log('Successfully decrypted using standard method');
+          } catch (decryptError: any) {
+            console.error('Primary decryption method failed:', decryptError.message);
+            await updateWebhookLogStatus(supabase, logId, 'decrypt_error', 
+              `Primary decrypt failed: ${decryptError.message}`);
+            
+            // Provide helpful error about possible versioning issue
+            console.error('The FormSG webhook is using v2.1 format, but the current SDK version (0.13.0) may not support it.');
+            console.error('Consider checking with FormSG support about v2.1 format support.');
+            
+            // Log the form and webhook IDs for reference
+            console.log('FormID:', body.data.formId);
+            console.log('SubmissionID:', body.data.submissionId);
+            
+            throw new Error(`Decryption failed for FormSG v${body.data.version}: ${decryptError.message}`);
+          }
         }
 
         if (!decrypted || typeof decrypted !== 'object') {
@@ -196,15 +229,31 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'Failed to decrypt submission' }, { status: 400 });
         }
 
-        // Handle both content types
-        submission = 'responses' in decrypted ? decrypted : decrypted.content;
+        // Handle different possible shapes of the decrypted data based on version
+        if ('responses' in decrypted) {
+          submission = decrypted;
+          console.log('Using direct responses from decrypted content');
+        } else if ('content' in decrypted && decrypted.content) {
+          submission = decrypted.content;
+          console.log('Using content property from decrypted result');
+        } else if ('data' in decrypted && decrypted.data?.responses) {
+          // FormSG v2.x may have a different structure
+          submission = decrypted.data;
+          console.log('Using data.responses from v2.x structure');
+        } else {
+          // Log the structure to help debug
+          console.error('Unknown decrypted content structure:', Object.keys(decrypted));
+          await updateWebhookLogStatus(supabase, logId, 'failed', 'Unrecognized decrypted content structure');
+          return NextResponse.json({ error: 'Unrecognized content structure' }, { status: 400 });
+        }
         
-        console.log('Successfully decrypted submission:', JSON.stringify(submission));
-
+        // Added additional logging for content structure verification
+        console.log('Decrypted content keys:', Object.keys(submission));
+        
         // After successful decryption, add this validation:
         if (!Array.isArray(submission.responses)) {
           const errorMsg = 'Decrypted content has invalid format: missing responses array';
-          console.error(errorMsg);
+          console.error(errorMsg, 'Content keys:', Object.keys(submission));
           await updateWebhookLogStatus(supabase, logId, 'failed', errorMsg);
           return NextResponse.json({ error: 'Invalid decrypted content format' }, { status: 400 });
         }
