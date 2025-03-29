@@ -207,7 +207,7 @@ export async function POST(req: Request) {
             // Log successful decryption format for future reference
             console.log('Successfully decrypted using standard method');
           } catch (decryptError: any) {
-            console.error('Primary decryption method failed:', decryptError.message);
+            console.error('Primary decryption method failed (full error):', decryptError);
             await updateWebhookLogStatus(supabase, logId, 'decrypt_error', 
               `Primary decrypt failed: ${decryptError.message}`);
             
@@ -222,6 +222,10 @@ export async function POST(req: Request) {
             throw new Error(`Decryption failed for FormSG v${body.data.version}: ${decryptError.message}`);
           }
         }
+
+        // --- MODIFICATION: Log the raw result before checking ---
+        console.log('Raw decryption result:', decrypted);
+        // --- END MODIFICATION ---
 
         if (!decrypted || typeof decrypted !== 'object') {
           console.error('Decryption returned invalid result:', decrypted);
@@ -242,7 +246,10 @@ export async function POST(req: Request) {
           console.log('Using data.responses from v2.x structure');
         } else {
           // Log the structure to help debug
-          console.error('Unknown decrypted content structure:', Object.keys(decrypted));
+          // --- MODIFICATION: Log full object on unknown structure ---
+          console.error('Unknown decrypted content structure (keys):', Object.keys(decrypted));
+          console.error('Unknown decrypted content structure (full):', JSON.stringify(decrypted));
+          // --- END MODIFICATION ---
           await updateWebhookLogStatus(supabase, logId, 'failed', 'Unrecognized decrypted content structure');
           return NextResponse.json({ error: 'Unrecognized content structure' }, { status: 400 });
         }
