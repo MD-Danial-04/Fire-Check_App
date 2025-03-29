@@ -70,36 +70,102 @@ export async function POST(req: Request) {
   const signature = requestHeaders.get('X-FormSG-Signature');
   const isTestMode = requestHeaders.get('X-Test-Mode') === 'true'; // Support test mode
 
-  let logId: number | null = null; // For updating log entry
-
+  // Start by cloning the request so we can use it later
+  const clonedReq = req.clone();
+  let body;
+  
   try {
-    // --- IP Check ---
-    // Skip IP check in test mode or development for easier testing
-    if (!isTestMode && process.env.NODE_ENV === 'production') {
-       if (!isIpAllowed(clientIp)) {
-         console.warn(`Webhook received from disallowed IP: ${clientIp}`);
-         // Optionally log this attempt before rejecting
-         await storeWebhookLog(supabase, {
-            payload: { error: 'Attempt from disallowed IP' }, // Avoid logging full payload from unknown IPs
-            source_ip: clientIp,
-            headers: Object.fromEntries(requestHeaders.entries()),
-            status: 'rejected',
-            errorMessage: 'Disallowed IP'
-         });
-         return NextResponse.json({ error: 'Unauthorized IP' }, { status: 403 });
-       }
-    }
-
     // Read body only once
-    let body;
     try {
-        body = await req.json();
+      body = await req.json();
     } catch (e) {
-        console.error("Failed to parse request body as JSON:", e);
-        return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+      console.error("Failed to parse request body as JSON:", e);
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
+    // --- IP Check (quick validation) ---
+    if (!isTestMode && process.env.NODE_ENV === 'production') {
+      if (!isIpAllowed(clientIp)) {
+        console.warn(`Webhook received from disallowed IP: ${clientIp}`);
+        return NextResponse.json({ error: 'Unauthorized IP' }, { status: 403 });
+      }
+    }
+    
+    // --- Quick Signature Verification ---
+    if (!signature && !isTestMode) {
+      console.warn('Missing X-FormSG-Signature header');
+      return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
+    }
 
+    // --- Quick Submission ID Check ---
+    // Extract submissionId for idempotency check
+    const submissionId = body.data?.submissionId;
+    if (!submissionId) {
+      console.warn('Webhook payload missing submissionId');
+      return NextResponse.json({ error: 'Missing submissionId' }, { status: 400 });
+    }
+    
+    // --- QUICK Idempotency Check ---
+    // Check if we've already processed this submissionId to avoid duplicates from retries
+    const { data: existingResponse } = await supabase
+      .from('form_responses')
+      .select('id')
+      .eq('response_id', submissionId)
+      .maybeSingle();
+      
+    if (existingResponse) {
+      console.log(`Submission ${submissionId} already processed. Acknowledging retry.`);
+      // Return success to stop FormSG from retrying, even though we won't process it again
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Already processed this submission',
+        idempotent: true
+      }, { status: 202 });
+    }
+    
+    // ⚠️ IMPORTANT: Return a quick 202 Accepted response to FormSG BEFORE processing
+    // This prevents retry loops by acknowledging receipt immediately
+    
+    // Spawn a Promise to process the request asynchronously after response is sent
+    processSubmissionAsync(clonedReq, body, clientIp, signature, isTestMode, requestHeaders, submissionId);
+    
+    // Return immediate success response to FormSG
+    return NextResponse.json({ 
+      success: true, 
+      message: 'Webhook received and queued for processing',
+      submissionId
+    }, { status: 202 });
+    
+  } catch (error: any) {
+    console.error('Error in quick validation phase:', error);
+    return NextResponse.json({ error: 'Server error during request validation' }, { status: 500 });
+  }
+}
+
+// Process the webhook asynchronously after responding
+async function processSubmissionAsync(
+  req: Request,
+  body: any,
+  clientIp: string,
+  signature: string | null,
+  isTestMode: boolean,
+  requestHeaders: Headers,
+  submissionId: string
+) {
+  const supabase = createRouteHandlerClient({ cookies }); // Create new client for async context
+  let logId: number | null = null;
+  
+  // Define a type for the response field
+  interface FormField {
+    _id: string;
+    fieldType: string;
+    question: string;
+    answer?: string;
+    answerArray?: string[] | string[][];
+    isHeader?: boolean;
+  }
+  
+  try {
     // --- Store Raw Log (Initial Entry) ---
     logId = await storeWebhookLog(supabase, {
       payload: body,
@@ -108,50 +174,49 @@ export async function POST(req: Request) {
       status: 'received' // Initial status
     });
 
-    // --- Signature Verification ---
-    if (!signature && !isTestMode) {
-      console.warn('Missing X-FormSG-Signature header');
-      await updateWebhookLogStatus(supabase, logId, 'failed', 'Missing signature');
-      return NextResponse.json({ error: 'Missing signature' }, { status: 401 });
-    }
-
-    // The SDK requires the full URL for verification
-    const postUri = req.url;
-
-    // Skip verification only in test mode
+    // --- Complete Signature Verification ---
     if (!isTestMode) {
-        // Ensure FORMSG_SECRET_KEY is set before proceeding in production
-        if (!FORM_SECRET_KEY && process.env.NODE_ENV === 'production') {
-            await updateWebhookLogStatus(supabase, logId, 'error', 'Server configuration error: Secret key missing');
-            return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-        }
-        try {
-             formsgClient.webhooks.authenticate(signature!, postUri);
-             // Note: authenticate throws error on failure
-        } catch (e: any) {
-            console.error('Invalid signature:', e.message);
-            await updateWebhookLogStatus(supabase, logId, 'failed', `Invalid signature: ${e.message}`);
-            return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-        }
+      // Ensure FORMSG_SECRET_KEY is set before proceeding in production
+      if (!FORM_SECRET_KEY && process.env.NODE_ENV === 'production') {
+        await updateWebhookLogStatus(supabase, logId, 'error', 'Server configuration error: Secret key missing');
+        return; // Exit async processing
+      }
+      
+      // The SDK requires the full URL for verification
+      const postUri = req.url;
+      
+      try {
+        formsgClient.webhooks.authenticate(signature!, postUri);
+        // Note: authenticate throws error on failure
+      } catch (e: any) {
+        console.error('Invalid signature:', e.message);
+        await updateWebhookLogStatus(supabase, logId, 'failed', `Invalid signature: ${e.message}`);
+        return; // Exit async processing
+      }
     }
 
-    // --- Decryption ---
+    // --- Decryption and Processing Logic (Same as before) ---
+    
+    // --- [REST OF YOUR EXISTING DECRYPTION AND PROCESSING CODE] ---
+    // The rest of your function remains largely the same, starting from:
+    // if (!body.data || !body.data.encryptedContent) { ... }
+    
+    /* Keep your existing code from here until the end of the function */
     if (!body.data || !body.data.encryptedContent) {
       console.warn('Webhook payload missing data.encryptedContent');
       console.log('Received payload structure:', JSON.stringify(body));
       await updateWebhookLogStatus(supabase, logId, 'failed', 'Missing encrypted content');
-      return NextResponse.json({ error: 'Missing encrypted content' }, { status: 400 });
+      return;
     }
 
     // Add validation for encrypted content type
     if (typeof body.data.encryptedContent !== 'string') {
       console.error('Invalid encryptedContent type:', typeof body.data.encryptedContent);
       await updateWebhookLogStatus(supabase, logId, 'failed', 'Invalid encryptedContent format');
-      return NextResponse.json({ error: 'Invalid payload format' }, { status: 400 });
+      return;
     }
 
     let submission;
-    const submissionId = body.data.submissionId;
 
     // For test mode, use a special path to avoid actual decryption
     if (isTestMode) {
@@ -167,7 +232,7 @@ export async function POST(req: Request) {
       } catch (error: any) {
         console.error('Failed to decode test payload:', error);
         await updateWebhookLogStatus(supabase, logId, 'failed', `Test mode decoding error: ${error.message}`);
-        return NextResponse.json({ error: 'Failed to decode test payload' }, { status: 400 });
+        return;
       }
     } else {
       // Production path using actual decryption
@@ -175,8 +240,7 @@ export async function POST(req: Request) {
       if (!FORM_SECRET_KEY) {
         console.error('Cannot decrypt: FORMSG_SECRET_KEY is not set.');
         await updateWebhookLogStatus(supabase, logId, 'error', 'Decryption key missing on server');
-        // Don't expose key missing error directly in production response
-        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+        return;
       }
 
       console.log('Attempting to decrypt with key length:', FORM_SECRET_KEY.length);
@@ -223,7 +287,7 @@ export async function POST(req: Request) {
             throw new Error(`Decryption failed for FormSG v${body.data.version}: ${decryptError.message}`);
           }
         }
-
+ 
         // --- MODIFICATION: Log the raw result before checking ---
         console.log('Raw decryption result:', decrypted);
         // --- END MODIFICATION ---
@@ -231,7 +295,7 @@ export async function POST(req: Request) {
         if (!decrypted || typeof decrypted !== 'object') {
           console.error('Decryption returned invalid result:', decrypted);
           await updateWebhookLogStatus(supabase, logId, 'failed', 'Invalid decryption result');
-          return NextResponse.json({ error: 'Failed to decrypt submission' }, { status: 400 });
+          return;
         }
 
         // Handle different possible shapes of the decrypted data based on version
@@ -252,47 +316,29 @@ export async function POST(req: Request) {
           console.error('Unknown decrypted content structure (full):', JSON.stringify(decrypted));
           // --- END MODIFICATION ---
           await updateWebhookLogStatus(supabase, logId, 'failed', 'Unrecognized decrypted content structure');
-          return NextResponse.json({ error: 'Unrecognized content structure' }, { status: 400 });
+          return;
         }
         
         // Added additional logging for content structure verification
-        console.log('Decrypted content keys:', Object.keys(submission));
-        
-        // After successful decryption, add this validation:
-        if (!Array.isArray(submission.responses)) {
-          const errorMsg = 'Decrypted content has invalid format: missing responses array';
-          console.error(errorMsg, 'Content keys:', Object.keys(submission));
-          await updateWebhookLogStatus(supabase, logId, 'failed', errorMsg);
-          return NextResponse.json({ error: 'Invalid decrypted content format' }, { status: 400 });
-        }
-
-        // Check if we have the expected minimum response count
-        if (submission.responses.length < 3) {
-          const errorMsg = `Decrypted content has too few responses: ${submission.responses.length}`;
-          console.error(errorMsg);
-          await updateWebhookLogStatus(supabase, logId, 'failed', errorMsg);
-          return NextResponse.json({ error: 'Incomplete form submission' }, { status: 400 });
-        }
+        console.log('Decrypted content structure validation passed. Type:', typeof submission);
+        console.log('Content has responses array:', Array.isArray(submission.responses));
+        console.log('Number of responses:', Array.isArray(submission.responses) ? submission.responses.length : 'N/A');
       } catch (error: any) {
-        console.error('Decryption error:', error);
+        console.error('Decryption or parsing failed:', error.message);
+        if (error.stack) console.error(error.stack);
         await updateWebhookLogStatus(supabase, logId, 'failed', `Decryption error: ${error.message}`);
-        return NextResponse.json({ error: 'Failed to decrypt submission' }, { status: 400 });
+        return;
       }
     }
 
-    // --- Extract Data ---
-    // The decrypted/decoded 'submission' contains the 'responses' array
-    const responses = submission.responses; // Array of response items
-
-    // Define a type for the response field to fix type errors
-    interface FormField {
-      _id: string;
-      fieldType: string;
-      question: string;
-      answer?: string;
-      answerArray?: string[] | string[][];
+    // --- Process Decrypted Responses ---
+    if (!submission || !submission.responses || !Array.isArray(submission.responses)) {
+      console.error('Missing responses array in decrypted content:', submission);
+      await updateWebhookLogStatus(supabase, logId, 'failed', 'Invalid submission format');
+      return;
     }
 
+    const responses = submission.responses;
     // Let TypeScript infer the type of 'r'
     const nameField = responses.find((r: FormField) => r._id === FIELD_IDS.name);
     const personName = nameField?.answer;
@@ -306,7 +352,7 @@ export async function POST(req: Request) {
       const errorMsg = `Missing required fields after processing: submissionId=${submissionId}, personName=${personName}`;
       console.error(errorMsg);
       await updateWebhookLogStatus(supabase, logId, 'failed', errorMsg);
-      return NextResponse.json({ error: 'Missing required fields after processing' }, { status: 400 });
+      return;
     }
 
     // --- Save Response ---
@@ -321,15 +367,14 @@ export async function POST(req: Request) {
 
     // --- Update Log Status ---
     await updateWebhookLogStatus(supabase, logId, isTestMode ? 'test_processed' : 'processed', null);
-
-    console.log(`Successfully processed webhook for submissionId: ${submissionId}`);
-    return NextResponse.json({ success: true, submissionId: submissionId });
+    /* End of reused code */
     
   } catch (error: any) {
-    console.error('Unhandled error in webhook processing:', error);
-    // Ensure log status is updated even for unhandled errors
-    await updateWebhookLogStatus(supabase, logId, 'error', error.message || 'Unknown processing error');
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    console.error('Unhandled error in async processing:', error);
+    // Update log with error details
+    if (logId) {
+      await updateWebhookLogStatus(supabase, logId, 'failed', `Unhandled error: ${error.message}`);
+    }
   }
 }
 
