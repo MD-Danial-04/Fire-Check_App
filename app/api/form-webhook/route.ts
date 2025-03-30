@@ -357,10 +357,24 @@ async function processSubmissionAsync(
 
     // --- Save Response ---
     // Pass the necessary extracted data (BWC S/N)
-    await saveResponseIdForPerson(supabase, personName, submissionId, {
-      bwc_sn: bwcSn // Save BWC S/N instead of BA sets
-      // Add other relevant decrypted data if needed
+    console.log('About to save form response to database:', {
+      personName,
+      submissionId,
+      form_type: 'ppe_check',
+      data: { bwc_sn: bwcSn }
     });
+    
+    try {
+      await saveResponseIdForPerson(supabase, personName, submissionId, {
+        bwc_sn: bwcSn // Save BWC S/N instead of BA sets
+        // Add other relevant decrypted data if needed
+      });
+      console.log('Successfully saved form response to database');
+    } catch (saveError: any) {
+      console.error('Failed to save form response:', saveError);
+      await updateWebhookLogStatus(supabase, logId, 'failed', `Database save error: ${saveError.message}`);
+      return;
+    }
 
     // --- NEW: Update Equipment Checklist ---
     await updateEquipmentChecklist(supabase, personName, bwcSn);
@@ -385,7 +399,14 @@ async function saveResponseIdForPerson(
   responseId: string, // Renamed submissionId to responseId for consistency with table
   formData: Record<string, any> // Pass specific data to store
 ) {
-  const { error } = await supabase
+  console.log('Inside saveResponseIdForPerson function. Inserting:', {
+    personnel_name: personName,
+    response_id: responseId,
+    form_type: 'ppe_check',
+    formData
+  });
+  
+  const { data, error } = await supabase
     .from('form_responses')
     .insert({
       personnel_name: personName,
@@ -393,14 +414,17 @@ async function saveResponseIdForPerson(
       form_type: 'ppe_check', // Differentiate from manual/bookmarklet submissions
       submitted_at: new Date().toISOString(),
       form_data: formData // Store relevant decrypted data
-    });
+    })
+    .select();
 
   if (error) {
       console.error("Error saving response to DB:", error);
       // Rethrow to be caught by the main handler, which will update the log
       throw new Error(`Database insert failed: ${error.message}`);
   }
-   console.log(`Saved form response for ${personName} with ID ${responseId}`);
+  
+  console.log(`Saved form response for ${personName} with ID ${responseId}. Result:`, data);
+  return data;
 }
 
 // --- NEW HELPER FUNCTION --- 
