@@ -39,6 +39,20 @@ interface PendingItemProps {
   suggestedRole?: string;
 }
 
+// Add interface for BWC assignment
+interface BwcAssignment {
+  name: string;
+  assigned_to: string;
+}
+
+// Add interface for BWC required personnel
+interface BwcRequiredPerson {
+  personnel: string;
+  position: string;
+  vehicle: string;
+  required: boolean;
+}
+
 // Sample data for charts
 const weeklyData = [
   { name: 'Mon', cylinders: 65, personnel: 45 },
@@ -61,6 +75,44 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+// Add helper function before the Dashboard component
+function normalizePersonnelName(name: string): string {
+  if (!name) return '';
+  
+  // Convert to uppercase and trim
+  let normalized = name.toUpperCase().trim();
+  
+  // First normalize the rank at the start of the name
+  const rankRegex = /^(SGT|CPL|WO|LCP|CPT|LTA)[\s-]*\d*/i;
+  normalized = normalized.replace(rankRegex, (match) => {
+    // Extract just the basic rank without numbers
+    const basicRank = match.match(/^(SGT|CPL|WO|LCP|CPT|LTA)/i)?.[0].toUpperCase() || match;
+    return basicRank + ' '; // Add space after rank
+  });
+
+  // Remove multiple spaces and trim
+  normalized = normalized.replace(/\s+/g, ' ').trim();
+  
+  // Handle special cases like "CPT ALVIN / WO ANG"
+  if (normalized.includes('/')) {
+    return normalized;
+  }
+  
+  // Split into parts and remove common words/particles
+  const parts = normalized.split(' ');
+  if (parts.length <= 1) return normalized;
+  
+  const rank = parts[0];
+  const nameParts = parts.slice(1)
+    .filter(part => !['BIN', 'BINTE', 'B', 'A/L', 'A/P'].includes(part));
+  
+  // Get first name (first part after rank)
+  const firstName = nameParts[0];
+  
+  // Return both full normalized name and first name version for matching
+  return `${rank} ${firstName}`;
+}
 
 export default function Dashboard() {
   const [isClient, setIsClient] = useState(false)
@@ -144,14 +196,29 @@ export default function Dashboard() {
           return;
         }
 
-        // Get unique personnel names (to avoid counting duplicates in the view)
-        const uniquePersonnel = new Set();
+        // Helper function to check if names match (either exact or first name)
+        const namesMatch = (name1: string, name2: string) => {
+          const norm1 = normalizePersonnelName(name1);
+          const norm2 = normalizePersonnelName(name2);
+          
+          // Check if either normalized version matches
+          return norm1 === norm2;
+        };
+
+        // Create a map of normalized names to original names to handle duplicates
+        const personnelMap = new Map();
         personnelData?.forEach(person => {
           if (person.personnel_name) {
-            uniquePersonnel.add(person.personnel_name);
+            const normalizedName = normalizePersonnelName(person.personnel_name);
+            // Keep the most complete version of the name (usually the longer one)
+            if (!personnelMap.has(normalizedName) || 
+                person.personnel_name.length > personnelMap.get(normalizedName).length) {
+              personnelMap.set(normalizedName, person.personnel_name);
+            }
           }
         });
-        const total = uniquePersonnel.size;
+        
+        const total = personnelMap.size;
 
         // 2. Get submitted form responses for PPE checks
         const { data: responseData, error: responseError } = await supabase
@@ -165,42 +232,64 @@ export default function Dashboard() {
           return;
         }
 
-        // 3. Calculate progress metrics
+        // 3. Calculate progress metrics with normalized names
         // Create a map of personnel to their most recent submission
         const submissionMap = new Map();
         responseData?.forEach(response => {
-          if (!submissionMap.has(response.personnel_name)) {
-            submissionMap.set(response.personnel_name, {
+          const normalizedName = normalizePersonnelName(response.personnel_name);
+          if (!submissionMap.has(normalizedName)) {
+            submissionMap.set(normalizedName, {
               submitted_at: response.submitted_at,
-              response_id: response.response_id
+              response_id: response.response_id,
+              original_name: response.personnel_name
             });
           }
         });
         
         // Count only unique personnel who have submitted
         const completed = submissionMap.size;
-        const inProgress = 0; // We don't track in-progress for form submissions
         const pending = total - completed;
 
         console.log(`PPE Progress: ${completed}/${total} completed, ${pending} pending`);
-        setPpeProgress({ total, completed, inProgress, pending });
+        setPpeProgress({ total, completed, inProgress: 0, pending });
 
         // Track completed personnel for PPE checks
         const completedPersonnelList: PendingItemProps[] = [];
-        submissionMap.forEach((data, name) => {
+        submissionMap.forEach((data, normalizedName) => {
+          // Use the original name from personnel map if available
+          const displayName = personnelMap.get(normalizedName) || data.original_name;
           completedPersonnelList.push({
-            name: name as string,
+            name: displayName,
             type: 'ppe'
           });
         });
         setCompletedPersonnel(completedPersonnelList);
 
-        // Track pending personnel for PPE checks
+        // Add debug logging for personnel map
+        console.log('Personnel Map after normalization:');
+        personnelMap.forEach((originalName, normalizedName) => {
+          console.log(`${originalName} -> ${normalizedName}`);
+        });
+
+        // Add debug logging for submission map
+        console.log('Submission Map after normalization:');
+        submissionMap.forEach((data, normalizedName) => {
+          console.log(`${data.original_name} -> ${normalizedName}`);
+        });
+
+        // Track pending personnel for PPE checks with debug logging
         const pendingPersonnel: PendingItemProps[] = [];
-        uniquePersonnel.forEach(name => {
-          if (!submissionMap.has(name)) {
+        personnelMap.forEach((originalName, normalizedName) => {
+          // Check if this person has submitted (using first name matching)
+          const hasSubmitted = Array.from(submissionMap.keys()).some(submittedName => 
+            namesMatch(submittedName, normalizedName)
+          );
+          
+          console.log(`Checking ${originalName} (${normalizedName}): ${hasSubmitted ? 'submitted' : 'pending'}`);
+          
+          if (!hasSubmitted) {
             pendingPersonnel.push({
-              name: name as string,
+              name: originalName,
               type: 'ppe'
             });
           }
@@ -208,16 +297,15 @@ export default function Dashboard() {
 
         // Update pending items state with PPE pending personnel
         setPendingItems(prevItems => {
-          // Filter out any previous PPE items
           const equipmentItems = prevItems.filter(item => item.type === 'equipment');
           return [...equipmentItems, ...pendingPersonnel];
         });
 
         // 4. Update recent activities
         if (responseData && responseData.length > 0) {
-          // Group by personnel_name and take only the most recent submission for each person
-          const uniqueSubmissions = Array.from(submissionMap.entries()).map(([name, data]) => ({
-            personnel_name: name,
+          // Use normalized names for grouping but original names for display
+          const uniqueSubmissions = Array.from(submissionMap.entries()).map(([normalizedName, data]) => ({
+            personnel_name: personnelMap.get(normalizedName) || data.original_name,
             submitted_at: data.submitted_at
           }));
           
@@ -338,19 +426,25 @@ export default function Dashboard() {
         };
 
         // Check which BWCs are assigned and to whom
-        const assignedBwcs = sections.bwc.filter(item => item.checked && item.assigned_to);
+        const assignedBwcs: BwcAssignment[] = sections.bwc.filter(item => item.checked && item.assigned_to) || [];
         
         // Update BWC personnel tracking
         const updatedBwcPersonnel = bwcRequiredPersonnel.map(person => {
           // Check if this person has a BWC assigned
-          const assignedBwc = assignedBwcs.find(bwc => 
-            bwc.assigned_to === person.personnel
-          );
+          const assignedBwc = assignedBwcs.find(bwc => {
+            // Normalize both names for comparison
+            const normalizedAssignedTo = normalizePersonnelName(bwc.assigned_to);
+            const normalizedPersonnel = normalizePersonnelName(person.personnel);
+            return normalizedAssignedTo === normalizedPersonnel;
+          });
           
           return {
-            ...person,
+            personnel: person.personnel,
+            position: person.position,
+            vehicle: person.vehicle,
             hasBwc: !!assignedBwc,
-            bwcSerial: assignedBwc?.name
+            bwcSerial: assignedBwc?.name,
+            required: person.required
           };
         });
         
