@@ -25,7 +25,44 @@ import BookmarkletInstructions from '@/components/BookmarkLetInstructions';
 import { useSearchParams } from 'next/navigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getSupabaseClient, cleanupAllChannels, retryWithExponentialBackoff, trackChannel, untrackChannel, resetSupabaseClient } from '@/lib/supabase-client';
-import { WebhookMonitor } from '@/components/WebhookMonitor';
+
+// Add helper function before the component
+function normalizePersonnelName(name: string): string {
+  if (!name) return '';
+  
+  // Convert to uppercase and trim
+  let normalized = name.toUpperCase().trim();
+  
+  // First normalize the rank at the start of the name
+  const rankRegex = /^(SGT|CPL|WO|LCP|CPT|LTA)[\s-]*\d*/i;
+  normalized = normalized.replace(rankRegex, (match) => {
+    // Extract just the basic rank without numbers
+    const basicRank = match.match(/^(SGT|CPL|WO|LCP|CPT|LTA)/i)?.[0].toUpperCase() || match;
+    return basicRank + ' '; // Add space after rank
+  });
+
+  // Remove multiple spaces and trim
+  normalized = normalized.replace(/\s+/g, ' ').trim();
+  
+  // Handle special cases like "CPT ALVIN / WO ANG"
+  if (normalized.includes('/')) {
+    return normalized;
+  }
+  
+  // Split into parts and remove common words/particles
+  const parts = normalized.split(' ');
+  if (parts.length <= 1) return normalized;
+  
+  const rank = parts[0];
+  const nameParts = parts.slice(1)
+    .filter(part => !['BIN', 'BINTE', 'B', 'A/L', 'A/P'].includes(part));
+  
+  // Get first name (first part after rank)
+  const firstName = nameParts[0];
+  
+  // Return rank + first name
+  return `${rank} ${firstName}`;
+}
 
 interface Personnel {
   id: string;
@@ -154,22 +191,47 @@ function PPECheckClient() {
     setIsBookmarkletCollapsed(!isBookmarkletCollapsed);
   };
 
-  // Add rank order function
-  const getRankOrder = (name: string) => {
+  // Add rank order function inside the component
+  const getRankOrder = (name: string, category: string) => {
     const rank = name.split(' ')[0].toUpperCase();
-    const rankOrder: { [key: string]: number } = {
-      // Regulars
-      'CPT': 1,
-      'LTA': 2,
-      'WO2': 3,
-      'WO1': 4,
-      'SGT3': 5,
-      // Firefighters
-      'SGT': 1,
-      'CPL': 2,
-      'LCP': 3
+    
+    // Different rank orders for different categories
+    const rankOrders: { [key: string]: { [key: string]: number } } = {
+      'REGULARS': {
+        'CPT': 1,
+        'LTA': 2,
+        'WO': 3,
+        'WO2': 3,  // Same level as WO
+        'WO1': 4,
+        'SGT3': 5,
+        'SGT2': 6,
+        'SGT1': 7,
+        'SGT': 8
+      },
+      'NS SECTION COMMANDER': {
+        'SGT': 1,
+        'SGT1': 1,
+        'SGT2': 1,
+        'SGT3': 1
+      },
+      'NS MARINE FIREFIGHTER': {
+        'SGT': 1,
+        'CPL': 2,
+        'LCP': 3
+      },
+      'ORNS/VES': {
+        'SGT': 1,
+        'CPL': 2,
+        'LCP': 3
+      }
     };
-    return rankOrder[rank] || 999; // Default high number for unknown ranks
+
+    // Handle variations of ranks
+    if (rank.startsWith('WO') && !rankOrders[category]?.[rank]) {
+      return rankOrders[category]?.['WO'] || 999;
+    }
+
+    return rankOrders[category]?.[rank] || 999; // Default high number for unknown ranks
   };
 
   // Function to fetch submitted responses
@@ -191,17 +253,27 @@ function PPECheckClient() {
       
       console.log('Fetched form responses:', data);
       
-      // Create a map of personnel name to their most recent response ID
+      // Create a map of normalized name to their most recent response ID
       const responseMap: Record<string, string> = {};
       data?.forEach((item: { personnel_name: string; response_id: string }) => {
-        // Only store the first (most recent) response for each person
-        if (!responseMap[item.personnel_name]) {
-          responseMap[item.personnel_name] = item.response_id;
+        const normalizedName = normalizePersonnelName(item.personnel_name);
+        // Only store the first (most recent) response for each normalized name
+        if (!responseMap[normalizedName]) {
+          responseMap[normalizedName] = item.response_id;
         }
       });
       
-      console.log('Processed response map:', responseMap);
-      setSubmittedResponses(responseMap);
+      // Create the final map matching the normalized names to the displayed names
+      const finalResponseMap: Record<string, string> = {};
+      groupedPersonnel.forEach(person => {
+        const normalizedDisplayName = normalizePersonnelName(person.name);
+        if (responseMap[normalizedDisplayName]) {
+          finalResponseMap[person.name] = responseMap[normalizedDisplayName];
+        }
+      });
+      
+      console.log('Processed response map:', finalResponseMap);
+      setSubmittedResponses(finalResponseMap);
     } catch (error) {
       console.error('Error fetching submitted responses:', error);
     }
@@ -342,8 +414,8 @@ function PPECheckClient() {
             const personA = a as GroupedPersonnel;
             const personB = b as GroupedPersonnel;
             
-            const categoryA = getCategory(personA.grouping);
-            const categoryB = getCategory(personB.grouping);
+            const categoryA = getCategory(personA.grouping, personA.name);
+            const categoryB = getCategory(personB.grouping, personB.name);
             
             const indexA = groupingOrder.indexOf(categoryA);
             const indexB = groupingOrder.indexOf(categoryB);
@@ -352,7 +424,7 @@ function PPECheckClient() {
             
             if ((categoryA === 'REGULARS' && categoryB === 'REGULARS') ||
                 (categoryA === 'NS MARINE FIREFIGHTER' && categoryB === 'NS MARINE FIREFIGHTER')) {
-              return getRankOrder(personA.name) - getRankOrder(personB.name);
+              return getRankOrder(personA.name, categoryA) - getRankOrder(personB.name, categoryB);
             }
             
             return personA.name.localeCompare(personB.name);
@@ -679,7 +751,21 @@ function PPECheckClient() {
   );
 
   // Map the groupings to our standard categories
-  const getCategory = (grouping: string) => {
+  const getCategory = (grouping: string, personName: string = '') => {
+    // Check for officer ranks in the name first
+    const officerRanks = ['CPT', 'LTA', 'WO'];
+    
+    // If the name starts with an officer rank, they should be in REGULARS
+    if (officerRanks.some(rank => personName.toUpperCase().startsWith(rank))) {
+      return 'REGULARS';
+    }
+    
+    // For compound names with officer ranks (e.g., "CPT ALVIN / WO ANG")
+    if (personName.includes('/') && 
+        officerRanks.some(rank => personName.toUpperCase().includes(rank))) {
+      return 'REGULARS';
+    }
+    
     // For Regulars
     if (grouping === 'Rota Commander' ||
         grouping === 'Deputy Rota Commander' ||
@@ -709,18 +795,27 @@ function PPECheckClient() {
 
   // Group personnel by category for display
   const personnelByCategory = filteredPersonnel.reduce((acc: { [key: string]: GroupedPersonnel[] }, person) => {
-    // Get the display category
-    let category = getCategory(person.grouping);
-    
-    // Special case for SGT3 Mustaqim - should be in REGULARS
-    if (person.name.includes('SGT3') || person.name.includes('Mustaqim')) {
-      category = 'REGULARS';
-    }
+    // Get the display category using both grouping and name
+    const category = getCategory(person.grouping, person.name);
     
     if (!acc[category]) {
       acc[category] = [];
     }
     acc[category].push(person);
+    
+    // Sort within each category by rank
+    acc[category].sort((a, b) => {
+      const rankOrderA = getRankOrder(a.name, category);
+      const rankOrderB = getRankOrder(b.name, category);
+      
+      if (rankOrderA !== rankOrderB) {
+        return rankOrderA - rankOrderB;
+      }
+      
+      // If ranks are the same, sort alphabetically by name
+      return a.name.localeCompare(b.name);
+    });
+    
     return acc;
   }, {});
 
@@ -1180,7 +1275,7 @@ function PPECheckClient() {
         ) : (
           /* Categories */
           groupingOrder.map(category => {
-            const personnel = filteredPersonnel.filter(p => getCategory(p.grouping) === category);
+            const personnel = filteredPersonnel.filter(p => getCategory(p.grouping, p.name) === category);
             if (!personnel?.length) return null;
 
               return (
@@ -1658,7 +1753,7 @@ function PPECheckClient() {
                   </SelectTrigger>
                   <SelectContent className="max-h-[300px]">
                     {groupingOrder.map((category) => {
-                      const personnelInCategory = groupedPersonnel.filter(p => getCategory(p.grouping) === category);
+                      const personnelInCategory = groupedPersonnel.filter(p => getCategory(p.grouping, p.name) === category);
                       if (!personnelInCategory.length) return null;
                       
                       return (
@@ -1714,9 +1809,6 @@ function PPECheckClient() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Conditionally render the WebhookMonitor only in development */}
-        {process.env.NODE_ENV === 'development' && <WebhookMonitor />}
       </div>
     </div>
   );
