@@ -80,4 +80,18 @@ export interface VehicleConfig {
   section: string
   created_at: string
   updated_at: string
+}
+
+export interface BaMovements {
+  id: string
+  ba_id: number
+  from_location: string
+  to_location: string
+  movement_date: string
+  movement_type: 'ASSIGNMENT' | 'RETURN' | 'TRANSFER' | 'SERVICE' | 'REPAIR'
+  status: 'PENDING' | 'COMPLETED' | 'CANCELLED'
+  remarks: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
 } 

@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { PostgrestSingleResponse, SupabaseClient } from '@supabase/supabase-js'
-import type { BaMasterList, ManningList } from '@/types/database'
+import type { BaMasterList, ManningList, BaMovements } from '@/types/database'
+import { createBrowserClient } from '@supabase/ssr'
 
 export const getDutySheet = async (date: string) => {
   try {
@@ -113,7 +114,8 @@ export const getManningList = async (date: string) => {
     console.error('Error in getManningList:', error)
     throw error
   }
-} 
+}
+
 export const getBAAssignments = async (supabase: SupabaseClient) => {
   const { data, error } = await supabase
     .from('personnel_ba_assignments')
@@ -130,4 +132,67 @@ export const getBAAssignments = async (supabase: SupabaseClient) => {
   }
 
   return data;
-}; 
+};
+
+export const getBAMovements = async (baId?: number) => {
+  try {
+    let query = supabase
+      .from('ba_movements')
+      .select('*')
+      .order('movement_date', { ascending: false })
+
+    if (baId) {
+      query = query.eq('ba_id', baId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(`Failed to fetch BA movements: ${error.message}`)
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error in getBAMovements:', error)
+    throw error
+  }
+}
+
+export const createBAMovement = async (movement: Omit<BaMovements, 'id' | 'created_at' | 'updated_at'>) => {
+  try {
+    const { data, error } = await supabase
+      .from('ba_movements')
+      .insert([movement])
+      .select()
+      .single()
+
+    if (error) {
+      throw new Error(`Failed to create BA movement: ${error.message}`)
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error in createBAMovement:', error)
+    throw error
+  }
+}
+
+export const updateBAMovement = async (id: string, updates: Partial<BaMovements>) => {
+  try {
+    const { data, error } = await supabase
+      .from('ba_movements')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      throw new Error(`Failed to update BA movement: ${error.message}`)
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error in updateBAMovement:', error)
+    throw error
+  }
+} 

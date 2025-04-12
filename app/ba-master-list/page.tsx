@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, MapPin, Plus, Check, X, List, Grid, Filter, AlertCircle } from 'lucide-react'
+import { Search, MapPin, Plus, Check, X, List, Grid, Filter, AlertCircle, ExternalLink } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getBAMasterList } from '@/lib/queries'
@@ -25,6 +25,14 @@ import { supabase } from '@/lib/supabase'
 import { Sheet, SheetContent, SheetTrigger } from "@/app/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import BAMovementsTable from '../components/BAMovementsTable'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { format } from 'date-fns'
 
 const locations = [
   'All Locations',
@@ -205,6 +213,9 @@ export default function BAMasterList() {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
   const [showMobileFilter, setShowMobileFilter] = useState(false)
+  const [selectedBaId, setSelectedBaId] = useState<number | null>(null)
+  const [showMovements, setShowMovements] = useState(false)
+  const [swapType, setSwapType] = useState<'BA' | 'CYLINDER'>('BA')
   
   useEffect(() => {
     fetchBAMasterList()
@@ -344,60 +355,66 @@ export default function BAMasterList() {
           return (
             <div 
               key={backplate.id}
-              className="space-y-3"
+              className={cn(
+                "p-4 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800",
+                selectedBaId === backplate.id && "bg-gray-100 dark:bg-gray-800"
+              )}
+              onClick={() => handleBaSelect(backplate.id)}
             >
-              <div className="flex items-center justify-between">
-                <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                  {roleName}
-                </span>
-                <div className="flex items-center gap-1">
-                  {hydroStatus && (
-                    <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
-                      <AlertCircle className="h-3 w-3" />
-                      <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
-                    </div>
-                  )}
-                  {!backplate.is_spare ? (
-                    <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1">
-                      <Check className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
-                    </div>
-                  ) : (
-                    <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1 opacity-40">
-                      <X className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-2 border-b border-gray-200 dark:border-[#FCF6EC]/20 pb-4">
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Backplate</span>
-                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                    {backplate.serial_number}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                    {roleName}
                   </span>
+                  <div className="flex items-center gap-1">
+                    {hydroStatus && (
+                      <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                        <AlertCircle className="h-3 w-3" />
+                        <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                      </div>
+                    )}
+                    {!backplate.is_spare ? (
+                      <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1">
+                        <Check className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
+                      </div>
+                    ) : (
+                      <div className="bg-gray-100 dark:bg-[#FCF6EC]/10 rounded-full p-1 opacity-40">
+                        <X className="h-3 w-3 text-gray-900 dark:text-[#FCF6EC]" />
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Cylinder</span>
-                  <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                    {backplate.cylinder_serial || '-'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Hydrostatic</span>
-                  <span className={`font-['Azeret_Mono'] ${hydroStatus ? getHydroStatusClass(hydroStatus) : 'text-gray-900 dark:text-[#FCF6EC]'} tracking-[0.1em] text-[10px] text-right`}>
-                    {backplate.hydro_date ? new Date(backplate.hydro_date).toLocaleDateString('en-GB', {
-                      year: 'numeric',
-                      month: 'short'
-                    }) : '-'}
-                  </span>
-                </div>
-                {backplate.remarks && (
-                  <div className="flex items-center justify-between text-[10px] mt-2">
-                    <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Remarks</span>
+                <div className="space-y-2 border-b border-gray-200 dark:border-[#FCF6EC]/20 pb-4">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Backplate</span>
                     <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
-                      {backplate.remarks}
+                      {backplate.serial_number}
                     </span>
                   </div>
-                )}
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Cylinder</span>
+                    <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                      {backplate.cylinder_serial || '-'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Hydrostatic</span>
+                    <span className={`font-['Azeret_Mono'] ${hydroStatus ? getHydroStatusClass(hydroStatus) : 'text-gray-900 dark:text-[#FCF6EC]'} tracking-[0.1em] text-[10px] text-right`}>
+                      {backplate.hydro_date ? new Date(backplate.hydro_date).toLocaleDateString('en-GB', {
+                        year: 'numeric',
+                        month: 'short'
+                      }) : '-'}
+                    </span>
+                  </div>
+                  {backplate.remarks && (
+                    <div className="flex items-center justify-between text-[10px] mt-2">
+                      <span className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em]">Remarks</span>
+                      <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                        {backplate.remarks}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -428,11 +445,14 @@ export default function BAMasterList() {
           return (
             <TableRow 
               key={backplate.id}
-              className={`
-                bg-white hover:bg-gray-50 dark:hover:bg-[#FCF6EC]/5
-                ${backplate.is_spare ? 'bg-gray-50 dark:bg-[#FCF6EC]/5' : ''}
-                ${hydroStatus ? getHydroStatusBgClass(hydroStatus) : ''}
-              `}
+              className={cn(
+                "cursor-pointer",
+                "bg-white hover:bg-gray-50 dark:hover:bg-[#FCF6EC]/5",
+                backplate.is_spare ? 'bg-gray-50 dark:bg-[#FCF6EC]/5' : '',
+                hydroStatus ? getHydroStatusBgClass(hydroStatus) : '',
+                selectedBaId === backplate.id && "bg-gray-100 dark:bg-gray-800"
+              )}
+              onClick={() => handleBaSelect(backplate.id)}
             >
               <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">{index + 1}</TableCell>
               <TableCell className="text-sm text-gray-700 dark:text-[#FCF6EC]/60 font-light font-['Azeret_Mono']">
@@ -490,6 +510,18 @@ export default function BAMasterList() {
       </TableBody>
     </Table>
   );
+
+  // Function to handle BA selection
+  const handleBaSelect = (baId: number) => {
+    setSelectedBaId(baId);
+    setShowMovements(true);
+  };
+
+  // Function to show all movements
+  const showAllMovements = () => {
+    setSelectedBaId(null);
+    setShowMovements(true);
+  };
 
   if (isLoading) {
     return (
@@ -606,6 +638,15 @@ export default function BAMasterList() {
                     <List className="h-4 w-4" />
                   )}
                 </Button>
+                
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={showAllMovements}
+                  className="h-8 w-8"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
 
                 <Button 
                   size="icon"
@@ -615,47 +656,6 @@ export default function BAMasterList() {
                 </Button>
               </div>
             </div>
-
-            {/* Mobile Search - Expandable */}
-            {showMobileSearch && (
-              <div className="md:hidden w-full">
-                <div className="relative">
-                  <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-neutral-400" />
-                  <Input 
-                    type="search" 
-                    placeholder="Search by serial number..." 
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-7 h-8 text-xs bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Mobile Location Filter - Expandable */}
-            {showMobileFilter && (
-              <div className="md:hidden w-full">
-                <Select value={locationFilter} onValueChange={setLocationFilter}>
-                  <SelectTrigger className="w-full h-8 bg-neutral-50 dark:bg-[#1C1917] border-0
-                                        text-gray-900 dark:text-[#FCF6EC] text-xs font-['Azeret_Mono']
-                                        focus-visible:ring-neutral-900 rounded-md">
-                    <MapPin className="mr-1 h-3 w-3 text-neutral-400" />
-                    <SelectValue placeholder="All Locations" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {locations.map(location => (
-                      <SelectItem 
-                        key={location} 
-                        value={location} 
-                        className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] hover:bg-gray-100 dark:hover:bg-[#2E2521]/90 transition-colors text-xs tracking-wide"
-                      >
-                        {location}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             {/* Desktop Search and Filter */}
             <div className="hidden md:flex items-center gap-2 md:gap-4 w-full md:w-auto">
@@ -689,6 +689,15 @@ export default function BAMasterList() {
                   ))}
                 </SelectContent>
               </Select>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={showAllMovements}
+                className="h-9"
+              >
+                View Movements
+              </Button>
             </div>
 
             {/* Desktop View Toggle and Add Button */}
@@ -1295,8 +1304,25 @@ export default function BAMasterList() {
           )}
         </div>
       </main>
-      </div>
+      
+      {/* Replace the bottom BAMovementsTable with a Dialog */}
+      {showMovements && (
+        <Dialog open={showMovements} onOpenChange={setShowMovements}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Movement History</DialogTitle>
+            </DialogHeader>
+            <BAMovementsTable 
+              baList={backplates} 
+              selectedBaId={selectedBaId}
+              showAllMovements={true}
+              swapType={swapType}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
-  )
+  </div>
+);
 }
 
