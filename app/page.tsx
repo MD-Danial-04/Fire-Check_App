@@ -8,6 +8,8 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { useEffect, useState } from 'react'
 import { cn } from "@/lib/utils"
 import { createClient } from '@supabase/supabase-js';
+import { useToast } from "@/components/ui/use-toast"
+// Note: Using global Toaster component in layout.tsx instead of local ToastProvider
 
 // Add interfaces for props and data types
 interface MetricCardProps {
@@ -115,6 +117,7 @@ function normalizePersonnelName(name: string): string {
 }
 
 export default function Dashboard() {
+  const { toast } = useToast()
   const [isClient, setIsClient] = useState(false)
   const [ppeProgress, setPpeProgress] = useState({
     total: 0,
@@ -179,6 +182,8 @@ export default function Dashboard() {
     bwcSerial?: string;
     required: boolean;
   }[]>([])
+
+  const [isScraperRunning, setIsScraperRunning] = useState(false)
 
   useEffect(() => {
     setIsClient(true)
@@ -775,6 +780,40 @@ export default function Dashboard() {
     return total > 0 ? Math.round((completed / total) * 100) : 0;
   }
 
+  // Add function to run the scraper
+  const runScraper = async () => {
+    try {
+      setIsScraperRunning(true)
+      
+      // Call the API
+      const response = await fetch('/api/run-scraper', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      
+      const data = await response.json()
+      
+      if (response.ok) {
+        toast({
+          title: "Scraper completed",
+          description: `Successfully processed ${data.details?.itemsProcessed || 0} items.`,
+        })
+      } else {
+        throw new Error(data.error || 'Failed to run scraper')
+      }
+    } catch (error) {
+      toast({
+        title: "Error running scraper",
+        description: error instanceof Error ? error.message : "Something went wrong",
+        variant: "destructive"
+      })
+    } finally {
+      setIsScraperRunning(false)
+    }
+  }
+
   return (
     <div className="flex-1 flex flex-col">
       {/* Top Navigation Bar */}
@@ -873,7 +912,28 @@ export default function Dashboard() {
           <div className="grid gap-3 sm:gap-6 grid-cols-1 lg:grid-cols-2">
             <Card className="border-gray-200 dark:border-neutral-700 dark:bg-neutral-800">
               <CardHeader className="px-4 py-2.5 sm:px-6 sm:py-4 border-b border-gray-100 dark:border-neutral-700">
-                <CardTitle className="text-base font-semibold dark:text-neutral-100">Equipment Check Status</CardTitle>
+                <div className="flex items-center justify-between w-full">
+                  <CardTitle className="text-base font-semibold dark:text-neutral-100">Equipment Check Status</CardTitle>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-7 sm:h-8 text-xs sm:text-sm dark:text-neutral-100 dark:border-neutral-700 dark:bg-neutral-700 dark:hover:bg-neutral-600"
+                    disabled={isScraperRunning}
+                    onClick={runScraper}
+                  >
+                    {isScraperRunning ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Running...
+                      </>
+                    ) : (
+                      'Update Armoury'
+                    )}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="px-4 py-3 sm:px-6 sm:py-6">
                 <div className="space-y-3 sm:space-y-6">

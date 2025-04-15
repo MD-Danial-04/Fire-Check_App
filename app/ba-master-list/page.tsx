@@ -212,7 +212,6 @@ export default function BAMasterList() {
   const [view, setView] = useState<'list' | 'grouped'>('grouped')
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
-  const [showMobileFilter, setShowMobileFilter] = useState(false)
   const [selectedBaId, setSelectedBaId] = useState<number | null>(null)
   const [showMovements, setShowMovements] = useState(false)
   const [swapType, setSwapType] = useState<'BA' | 'CYLINDER'>('BA')
@@ -607,30 +606,69 @@ export default function BAMasterList() {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 md:gap-6 py-4 md:py-6 max-w-7xl mx-auto">
             {/* Mobile Actions */}
             <div className="flex md:hidden items-center justify-between w-full gap-2">
-              <Button 
-                variant="outline" 
-                size="icon"
-                onClick={() => setShowMobileSearch(!showMobileSearch)}
-                className="h-8 w-8 shrink-0"
-              >
-                <Search className="h-4 w-4" />
-              </Button>
+              {/* Mobile Search - Conditional rendering */}
+              {showMobileSearch ? (
+                <div className="relative flex-1 mr-2 transition-all duration-200 ease-in-out">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                  <Input 
+                    type="search" 
+                    placeholder="Search serial number..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10 h-8 text-xs bg-neutral-50 dark:bg-[#1C1917] border-0 w-full focus-visible:ring-neutral-900 rounded-md"
+                    autoFocus
+                  />
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={() => setShowMobileSearch(false)}
+                    className="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 bg-transparent text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => setShowMobileSearch(true)}
+                  className="h-8 w-8 p-2 border-0 rounded-md inline-flex items-center justify-center bg-neutral-900 text-white shrink-0"
+                >
+                  <Search className="h-4 w-4" />
+                </Button>
+              )}
 
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => setShowMobileFilter(!showMobileFilter)}
-                  className="h-8 w-8"
-                >
-                  <MapPin className="h-4 w-4" />
-                </Button>
+                {/* Mobile Location Filter - Icon Only Dropdown */}
+                <Select value={locationFilter} onValueChange={setLocationFilter}>
+                  <SelectTrigger 
+                    className="h-8 w-8 p-2 border-0 rounded-md inline-flex items-center justify-center bg-neutral-900 text-white [&>svg:last-child]:hidden"
+                    aria-label="Filter by location"
+                  >
+                    <MapPin className="h-4 w-4" />
+                  </SelectTrigger>
+                  {/* SelectValue removed to make it icon only */}
+                  <SelectContent>
+                    {locations.map(location => (
+                      <SelectItem 
+                        key={location} 
+                        value={location} 
+                        className="font-['Azeret_Mono'] text-xs tracking-wide"
+                      >
+                        {location}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
                 <Button 
                   variant="outline" 
                   size="icon"
-                  onClick={() => setView(view === 'list' ? 'grouped' : 'list')}
-                  className="h-8 w-8"
+                  onClick={() => {
+                    console.log('[Mobile View Button] Clicked! Current view:', view); // Log 1: Button click + current state
+                    setView(view === 'list' ? 'grouped' : 'list');
+                  }}
+                  className="h-8 w-8 p-2 border-0 rounded-md inline-flex items-center justify-center bg-neutral-900 text-white"
                 >
                   {view === 'list' ? (
                     <Grid className="h-4 w-4" />
@@ -643,7 +681,7 @@ export default function BAMasterList() {
                   variant="outline" 
                   size="icon"
                   onClick={showAllMovements}
-                  className="h-8 w-8"
+                  className="h-8 w-8 p-2 border-0 rounded-md inline-flex items-center justify-center bg-neutral-900 text-white"
                 >
                   <ExternalLink className="h-4 w-4" />
                 </Button>

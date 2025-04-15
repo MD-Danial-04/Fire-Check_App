@@ -2,6 +2,7 @@ import { Inter } from 'next/font/google'
 import { Sidebar } from '@/components/sidebar'
 import { MobileNav } from '@/components/mobile-nav'
 import { ThemeProvider } from './providers/theme-provider'
+import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 import '@fontsource/azeret-mono/400.css' // Regular
 import '@fontsource/azeret-mono/500.css' // Medium
@@ -49,6 +50,7 @@ export default function RootLayout({
               </main>
             </div>
           </div>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>
