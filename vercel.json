@@ -1,5 +1,5 @@
 {
-  "buildCommand": "next build",
+  "buildCommand": "npm install && npx playwright install chromium --only && next build",
   "devCommand": "next dev",
   "installCommand": "npm install",
   "functions": {
@@ -7,5 +7,9 @@
       "memory": 1024,
       "maxDuration": 60
     }
+  },
+  "env": {
+    "PLAYWRIGHT_BROWSERS_PATH": "0",
+    "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "0"
   }
 } 
