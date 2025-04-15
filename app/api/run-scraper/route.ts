@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import chromium from 'chrome-aws-lambda';
-import puppeteer from 'puppeteer-core';
+import fetch from 'node-fetch';
+import * as cheerio from 'cheerio';
 
 interface InventoryItem {
   name: string;
@@ -25,33 +25,30 @@ interface MappedItem {
   name: string;
 }
 
-interface LocalStorageItem {
+interface ScrapedItem {
+  title: string;
+  status: string;
+  dueDate: string;
+}
+
+interface SessionCookie {
   name: string;
   value: string;
+  domain?: string;
+  path?: string;
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'Strict' | 'Lax' | 'None';
 }
 
-interface Origin {
-  localStorage: LocalStorageItem[];
-  [key: string]: any;
-}
-
-interface StorageState {
-  cookies: Array<{
-    name: string;
-    value: string;
-    domain?: string;
-    path?: string;
-    expires?: number;
-    httpOnly?: boolean;
-    secure?: boolean;
-    sameSite?: 'Strict' | 'Lax' | 'None';
+interface SessionData {
+  cookies: SessionCookie[];
+  origins?: Array<{
+    localStorage?: Array<{ name: string; value: string }>;
+    [key: string]: any;
   }>;
-  origins: Origin[];
-}
-
-interface SelectorData {
-  selector: string;
-  index: number;
+  [key: string]: any;
 }
 
 // Initialize Supabase client
@@ -59,7 +56,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function loadSessionFromDatabase(context: puppeteer.Page) {
+async function loadSessionFromDatabase(): Promise<SessionData | null> {
   try {
     // Try to load the latest session state from Supabase
     const { data, error } = await supabase
@@ -71,51 +68,17 @@ async function loadSessionFromDatabase(context: puppeteer.Page) {
     
     if (error || !data || !data.session_data) {
       console.error('Error loading session from database:', error);
-      return false;
+      return null;
     }
     
-    const storageState = data.session_data;
-    
-    // Add cookies to the context
-    if (storageState.cookies && storageState.cookies.length > 0) {
-      // Transform cookies to match puppeteer's expected format
-      const puppeteerCookies = storageState.cookies.map((cookie: StorageState['cookies'][0]) => ({
-        ...cookie,
-        // Fix sameSite if it's "None" (not supported by puppeteer-core)
-        sameSite: cookie.sameSite === 'None' ? undefined : cookie.sameSite
-      }));
-      
-      await context.setCookie(...puppeteerCookies);
-      console.log(`Loaded ${storageState.cookies.length} cookies from database`);
-    }
-    
-    // Add origins to the context
-    if (storageState.origins && storageState.origins.length > 0) {
-      for (const origin of storageState.origins) {
-        if (origin.localStorage && origin.localStorage.length > 0) {
-          await context.evaluate((items) => {
-            for (const item of items) {
-              try {
-                window.localStorage.setItem(item.name, item.value);
-              } catch(e) {
-                console.error('Error setting localStorage', e);
-              }
-            }
-          }, origin.localStorage);
-        }
-      }
-      console.log(`Loaded ${storageState.origins.length} origins from database`);
-    }
-    
-    console.log('Session state loaded successfully from database');
-    return true;
+    return data.session_data as SessionData;
   } catch (error) {
     console.error('Error loading session from database:', error);
-    return false;
+    return null;
   }
 }
 
-async function processAndUpdateChecklist(items: any[]) {
+async function processAndUpdateChecklist(items: ScrapedItem[]) {
   console.log('Processing and updating checklist items...');
   
   // Define the mapping of items
@@ -181,223 +144,127 @@ async function processAndUpdateChecklist(items: any[]) {
 }
 
 async function runScraper() {
-  let browser = null;
   try {
-    console.log('Starting browser using chrome-aws-lambda...');
-    
-    browser = await puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
-      executablePath: await chromium.executablePath,
-      headless: chromium.headless,
-      ignoreHTTPSErrors: true,
-    });
-    
-    const page = await browser.newPage();
-    
-    // Set user agent and headers
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0');
-    await page.setExtraHTTPHeaders({
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'en-US,en;q=0.5',
-      'Sec-GPC': '1',
-      'Upgrade-Insecure-Requests': '1',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'cross-site',
-      'Sec-Fetch-User': '?1',
-      'Priority': 'u=0, i'
-    });
-    
-    console.log('Attempting to load session from database...');
+    console.log('Starting HTTP-based scraper...');
     
     // Load session data
-    const { data, error } = await supabase
-      .from('browser_sessions')
-      .select('session_data')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+    const sessionData = await loadSessionFromDatabase();
     
-    if (error || !data || !data.session_data) {
-      console.error('Error loading session from database:', error);
+    if (!sessionData || !sessionData.cookies) {
       throw new Error('No valid session found in database');
     }
     
-    const storageState = data.session_data as StorageState;
-    
-    // Add cookies
-    if (storageState.cookies && storageState.cookies.length > 0) {
-      // Transform cookies to match puppeteer's expected format
-      const puppeteerCookies = storageState.cookies.map((cookie: StorageState['cookies'][0]) => ({
-        ...cookie,
-        // Fix sameSite if it's "None" (not supported by puppeteer-core)
-        sameSite: cookie.sameSite === 'None' ? undefined : cookie.sameSite
-      }));
-      
-      await page.setCookie(...puppeteerCookies);
-      console.log(`Loaded ${storageState.cookies.length} cookies from database`);
-    }
-    
-    // Add localStorage
-    if (storageState.origins && storageState.origins.length > 0) {
-      for (const origin of storageState.origins) {
-        if (origin.localStorage && origin.localStorage.length > 0) {
-          // Convert to a simple array of key-value pairs for serialization
-          const localStorageItems = origin.localStorage.map(item => ({
-            key: item.name,
-            value: item.value
-          }));
-          
-          await page.evaluateOnNewDocument((items) => {
-            for (const item of items) {
-              try {
-                window.localStorage.setItem(item.key, item.value);
-              } catch(e) {
-                console.error('Error setting localStorage', e);
-              }
-            }
-          }, localStorageItems); // This should now be serializable
-        }
-      }
-    }
+    // Extract cookies from session data
+    const cookies = sessionData.cookies.map((cookie: SessionCookie) => `${cookie.name}=${cookie.value}`).join('; ');
     
     console.log('Session loaded successfully!');
-    console.log('Navigating to lists page...');
+    console.log('Fetching lists page...');
     
-    await page.goto('https://armoury.gov.sg/lists', {
-      waitUntil: 'domcontentloaded',
-      timeout: 30000
+    // Fetch the lists page
+    const response = await fetch('https://armoury.gov.sg/lists', {
+      headers: {
+        'Cookie': cookies,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Sec-GPC': '1',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-User': '?1'
+      }
     });
     
-    // Wait for navigation to complete
-    await page.waitForTimeout(5000);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch lists page: ${response.status} ${response.statusText}`);
+    }
     
-    console.log('Page loaded, looking for "View all" element...');
-    const buttonSelectors = [
-      'p.chakra-text.css-10ahl1q:has-text("View all")',
-      'p.chakra-text:has-text("View all")',
-      'p:has-text("View all")'
-    ];
+    const html = await response.text();
+    const $ = cheerio.load(html);
     
-    let viewAllElement = null;
-    for (const selector of buttonSelectors) {
-      try {
-        viewAllElement = await page.waitForSelector(selector, { timeout: 5000 });
-        if (viewAllElement) {
-          console.log(`Found "View all" element with selector: ${selector}`);
-          break;
-        }
-      } catch (error) {
-        console.log(`Element not found with selector: ${selector}`);
+    console.log('Page loaded, looking for "View all" link...');
+    
+    // Get the URL of the "View all" link
+    const viewAllHref = $('p.chakra-text:contains("View all")').closest('a').attr('href');
+    
+    if (!viewAllHref) {
+      throw new Error('Could not find "View all" link');
+    }
+    
+    const viewAllUrl = new URL(viewAllHref, 'https://armoury.gov.sg').href;
+    console.log(`Found "View all" link: ${viewAllUrl}`);
+    
+    // Fetch the "View all" page
+    const viewAllResponse = await fetch(viewAllUrl, {
+      headers: {
+        'Cookie': cookies,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Sec-GPC': '1',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-User': '?1'
       }
+    });
+    
+    if (!viewAllResponse.ok) {
+      throw new Error(`Failed to fetch view all page: ${viewAllResponse.status} ${viewAllResponse.statusText}`);
     }
     
-    if (!viewAllElement) {
-      throw new Error('Could not find "View all" element with any selector');
-    }
-    
-    console.log('Clicking "View all" element...');
-    await viewAllElement.click();
-    console.log('Clicked "View all" element successfully');
-    
-    await page.waitForTimeout(1000);
+    const viewAllHtml = await viewAllResponse.text();
+    const $viewAll = cheerio.load(viewAllHtml);
     
     console.log('Reading items...');
-    const items = await page.$$('.css-8krjsn');
-    const processedItems = [];
+    const processedItems: ScrapedItem[] = [];
     
-    for (const item of items) {
+    // Parse the items from the page
+    $viewAll('.css-8krjsn').each((index, element) => {
       try {
-        const title = await item.$eval('p.chakra-text.css-qlwhay', (el: Element) => el.textContent);
+        const title = $viewAll(element).find('p.chakra-text.css-qlwhay').text().trim();
         
+        // Get the details div that follows this item
+        const detailsDiv = $viewAll(element).next();
+        
+        // Try different selectors for status
         const statusSelectors = [
           '.css-1jcdzpd p.chakra-text',
           '.css-o5vkw1 p.chakra-text',
           '.css-181ukw4 p.chakra-text'
         ];
         
-        // Get the current item's position to find its details div
-        const itemIndex = await page.evaluate((el: Element) => {
-          const allItems = Array.from(document.querySelectorAll('.css-8krjsn'));
-          return allItems.indexOf(el);
-        }, item);
-        
         let status = 'Unknown';
         for (const selector of statusSelectors) {
-          try {
-            // Use the itemIndex to find the correct details div
-            const statusElement = await page.evaluate(
-              (data: SelectorData) => {
-                const { selector, index } = data;
-                const items = document.querySelectorAll('.css-8krjsn');
-                if (items[index]) {
-                  const detailsDivElement = items[index].nextElementSibling;
-                  if (detailsDivElement) {
-                    const statusEl = detailsDivElement.querySelector(selector);
-                    return statusEl ? statusEl.textContent : null;
-                  }
-                }
-                return null;
-              }, 
-              { selector, index: itemIndex }
-            );
-            
-            if (statusElement) {
-              status = statusElement;
-              break;
-            }
-          } catch (error) {
-            console.log(`Error checking selector ${selector}:`, error);
+          const statusElement = detailsDiv.find(selector);
+          if (statusElement.length > 0) {
+            status = statusElement.text().trim();
+            break;
           }
         }
         
-        // Use the itemIndex for due date as well
-        const dueDate = await page.evaluate((idx: number) => {
-          const items = document.querySelectorAll('.css-8krjsn');
-          if (items[idx]) {
-            const detailsDivElement = items[idx].nextElementSibling;
-            if (detailsDivElement) {
-              const dueDateEl = detailsDivElement.querySelector('p.chakra-text.css-jjn383');
-              return dueDateEl ? dueDateEl.textContent : 'No due date';
-            }
-          }
-          return 'No due date';
-        }, itemIndex);
+        // Get due date
+        const dueDate = detailsDiv.find('p.chakra-text.css-jjn383').text().trim() || 'No due date';
         
         processedItems.push({ title, status, dueDate });
       } catch (error) {
         console.error('Error reading item:', error);
       }
-    }
+    });
+    
+    console.log(`Processed ${processedItems.length} items`);
     
     console.log('Updating Supabase database...');
     await processAndUpdateChecklist(processedItems);
     console.log('Database update completed');
     
-    // Close the browser before returning
-    if (browser) {
-      console.log('Closing browser...');
-      await browser.close();
-      console.log('Browser closed successfully');
-    }
-    
     console.log('Scraper completed successfully');
-    return { success: true, message: 'Scraping completed' };
+    return { success: true, message: 'Scraping completed', items: processedItems.length };
   } catch (error) {
-    // Close the browser if there's an error
-    if (browser) {
-      try {
-        console.log('Closing browser due to error...');
-        await browser.close();
-        console.log('Browser closed after error');
-      } catch (closeError) {
-        console.error('Error closing browser:', closeError);
-      }
-    }
     console.error('Scraper error:', error instanceof Error ? error.message : 'Unknown error');
-    // Ensure the full error is logged for debugging
-    console.error(error); 
+    console.error(error);
     throw error;
   }
 }
