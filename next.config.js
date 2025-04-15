@@ -29,6 +29,14 @@ const nextConfig = {
       config.devtool = 'eval-source-map';
     }
     
+    // Fix for undici dependency issues on Vercel
+    if (!isServer) {
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'undici': 'node-fetch'
+      };
+    }
+    
     return config;
   },
   // Configure for Playwright and serverless environment
