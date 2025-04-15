@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
 
 interface InventoryItem {
