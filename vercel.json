@@ -1,15 +1,11 @@
 {
-  "buildCommand": "npx playwright install chromium && next build",
+  "buildCommand": "next build",
   "devCommand": "next dev",
   "installCommand": "npm install",
   "functions": {
     "app/api/run-scraper/route.ts": {
       "memory": 1024,
-      "maxDuration": 60,
-      "includeFiles": "node_modules/@sparticuz/chromium/**"
+      "maxDuration": 60
     }
-  },
-  "env": {
-    "PLAYWRIGHT_BROWSERS_PATH": "0"
   }
 } 

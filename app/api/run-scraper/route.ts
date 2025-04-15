@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import playwright from 'playwright-core';
-import chromium from '@sparticuz/chromium';
+import chromium from 'chrome-aws-lambda';
+import puppeteer from 'puppeteer-core';
 
 interface InventoryItem {
   name: string;
@@ -25,12 +25,41 @@ interface MappedItem {
   name: string;
 }
 
+interface LocalStorageItem {
+  name: string;
+  value: string;
+}
+
+interface Origin {
+  localStorage: LocalStorageItem[];
+  [key: string]: any;
+}
+
+interface StorageState {
+  cookies: Array<{
+    name: string;
+    value: string;
+    domain?: string;
+    path?: string;
+    expires?: number;
+    httpOnly?: boolean;
+    secure?: boolean;
+    sameSite?: 'Strict' | 'Lax' | 'None';
+  }>;
+  origins: Origin[];
+}
+
+interface SelectorData {
+  selector: string;
+  index: number;
+}
+
 // Initialize Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function loadSessionFromDatabase(context: playwright.BrowserContext) {
+async function loadSessionFromDatabase(context: puppeteer.Page) {
   try {
     // Try to load the latest session state from Supabase
     const { data, error } = await supabase
@@ -49,7 +78,14 @@ async function loadSessionFromDatabase(context: playwright.BrowserContext) {
     
     // Add cookies to the context
     if (storageState.cookies && storageState.cookies.length > 0) {
-      await context.addCookies(storageState.cookies);
+      // Transform cookies to match puppeteer's expected format
+      const puppeteerCookies = storageState.cookies.map((cookie: StorageState['cookies'][0]) => ({
+        ...cookie,
+        // Fix sameSite if it's "None" (not supported by puppeteer-core)
+        sameSite: cookie.sameSite === 'None' ? undefined : cookie.sameSite
+      }));
+      
+      await context.setCookie(...puppeteerCookies);
       console.log(`Loaded ${storageState.cookies.length} cookies from database`);
     }
     
@@ -57,13 +93,15 @@ async function loadSessionFromDatabase(context: playwright.BrowserContext) {
     if (storageState.origins && storageState.origins.length > 0) {
       for (const origin of storageState.origins) {
         if (origin.localStorage && origin.localStorage.length > 0) {
-          for (const item of origin.localStorage) {
-            await context.addInitScript(`try { 
-              window.localStorage.setItem('${item.name}', '${item.value}'); 
-            } catch(e) { 
-              console.error('Error setting localStorage', e); 
-            }`);
-          }
+          await context.evaluate((items) => {
+            for (const item of items) {
+              try {
+                window.localStorage.setItem(item.name, item.value);
+              } catch(e) {
+                console.error('Error setting localStorage', e);
+              }
+            }
+          }, origin.localStorage);
         }
       }
       console.log(`Loaded ${storageState.origins.length} origins from database`);
@@ -143,75 +181,97 @@ async function processAndUpdateChecklist(items: any[]) {
 }
 
 async function runScraper() {
-  let browser: playwright.Browser | null = null;
+  let browser = null;
   try {
-    console.log('Starting browser using @sparticuz/chromium...');
+    console.log('Starting browser using chrome-aws-lambda...');
     
-    // Use sparticuz/chromium to get executable path and launch options
-    browser = await playwright.chromium.launch({
+    browser = await puppeteer.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath(), 
-      headless: true, // Explicitly set to true for serverless
-      // Remove specific sandbox args as sparticuz handles common ones
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      headless: chromium.headless,
+      ignoreHTTPSErrors: true,
     });
     
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      extraHTTPHeaders: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Sec-GPC': '1',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'cross-site',
-        'Sec-Fetch-User': '?1',
-        'Priority': 'u=0, i'
-      }
+    const page = await browser.newPage();
+    
+    // Set user agent and headers
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0');
+    await page.setExtraHTTPHeaders({
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Sec-GPC': '1',
+      'Upgrade-Insecure-Requests': '1',
+      'Sec-Fetch-Dest': 'document',
+      'Sec-Fetch-Mode': 'navigate',
+      'Sec-Fetch-Site': 'cross-site',
+      'Sec-Fetch-User': '?1',
+      'Priority': 'u=0, i'
     });
     
-    const page = await context.newPage();
     console.log('Attempting to load session from database...');
     
-    // Try to load session from database
-    const sessionLoaded = await loadSessionFromDatabase(context);
+    // Load session data
+    const { data, error } = await supabase
+      .from('browser_sessions')
+      .select('session_data')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
     
-    if (!sessionLoaded) {
-      console.log('Failed to load session from database');
+    if (error || !data || !data.session_data) {
+      console.error('Error loading session from database:', error);
       throw new Error('No valid session found in database');
+    }
+    
+    const storageState = data.session_data as StorageState;
+    
+    // Add cookies
+    if (storageState.cookies && storageState.cookies.length > 0) {
+      // Transform cookies to match puppeteer's expected format
+      const puppeteerCookies = storageState.cookies.map((cookie: StorageState['cookies'][0]) => ({
+        ...cookie,
+        // Fix sameSite if it's "None" (not supported by puppeteer-core)
+        sameSite: cookie.sameSite === 'None' ? undefined : cookie.sameSite
+      }));
+      
+      await page.setCookie(...puppeteerCookies);
+      console.log(`Loaded ${storageState.cookies.length} cookies from database`);
+    }
+    
+    // Add localStorage
+    if (storageState.origins && storageState.origins.length > 0) {
+      for (const origin of storageState.origins) {
+        if (origin.localStorage && origin.localStorage.length > 0) {
+          // Convert to a simple array of key-value pairs for serialization
+          const localStorageItems = origin.localStorage.map(item => ({
+            key: item.name,
+            value: item.value
+          }));
+          
+          await page.evaluateOnNewDocument((items) => {
+            for (const item of items) {
+              try {
+                window.localStorage.setItem(item.key, item.value);
+              } catch(e) {
+                console.error('Error setting localStorage', e);
+              }
+            }
+          }, localStorageItems); // This should now be serializable
+        }
+      }
     }
     
     console.log('Session loaded successfully!');
     console.log('Navigating to lists page...');
-    
-    let fetchCompleted = false;
-    page.on('response', response => {
-      if (response.url() === 'https://armoury.gov.sg/lists' && 
-          response.request().method() === 'GET' &&
-          response.request().headers()['sec-fetch-mode'] === 'navigate') {
-        console.log('Detected lists page fetch request');
-        fetchCompleted = true;
-      }
-    });
     
     await page.goto('https://armoury.gov.sg/lists', {
       waitUntil: 'domcontentloaded',
       timeout: 30000
     });
     
-    console.log('Waiting for lists page fetch request...');
-    await Promise.race([
-      new Promise(resolve => {
-        const checkFetch = setInterval(() => {
-          if (fetchCompleted) {
-            clearInterval(checkFetch);
-            resolve(true);
-          }
-        }, 100);
-      }),
-      page.waitForLoadState('networkidle', { timeout: 30000 })
-    ]);
+    // Wait for navigation to complete
+    await page.waitForTimeout(5000);
     
     console.log('Page loaded, looking for "View all" element...');
     const buttonSelectors = [
@@ -249,7 +309,7 @@ async function runScraper() {
     
     for (const item of items) {
       try {
-        const title = await item.$eval('p.chakra-text.css-qlwhay', el => el.textContent);
+        const title = await item.$eval('p.chakra-text.css-qlwhay', (el: Element) => el.textContent);
         
         const statusSelectors = [
           '.css-1jcdzpd p.chakra-text',
@@ -258,7 +318,7 @@ async function runScraper() {
         ];
         
         // Get the current item's position to find its details div
-        const itemIndex = await page.evaluate((el) => {
+        const itemIndex = await page.evaluate((el: Element) => {
           const allItems = Array.from(document.querySelectorAll('.css-8krjsn'));
           return allItems.indexOf(el);
         }, item);
@@ -268,7 +328,7 @@ async function runScraper() {
           try {
             // Use the itemIndex to find the correct details div
             const statusElement = await page.evaluate(
-              (data) => {
+              (data: SelectorData) => {
                 const { selector, index } = data;
                 const items = document.querySelectorAll('.css-8krjsn');
                 if (items[index]) {
@@ -293,7 +353,7 @@ async function runScraper() {
         }
         
         // Use the itemIndex for due date as well
-        const dueDate = await page.evaluate((idx) => {
+        const dueDate = await page.evaluate((idx: number) => {
           const items = document.querySelectorAll('.css-8krjsn');
           if (items[idx]) {
             const detailsDivElement = items[idx].nextElementSibling;
