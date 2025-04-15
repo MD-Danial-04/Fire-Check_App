@@ -31,10 +31,21 @@ const nextConfig = {
     
     return config;
   },
-  // Add experimental flag to ensure environment variables are properly processed
+  // Configure for Playwright and serverless environment
   experimental: {
     // This ensures that environment variables are properly loaded
-    esmExternals: 'loose'
+    esmExternals: 'loose',
+    // Increase serverless function timeout for Playwright operations
+    serverComponentsExternalPackages: ['playwright', 'playwright-core'],
+    // Configure larger function size limits
+    largePageDataBytes: 128 * 1000, // 128KB, default is 128KB
+    serverActions: {
+      bodySizeLimit: '4mb' // Increase the limit to accommodate Playwright
+    }
+  },
+  // Update serverless function settings to support browser automation
+  serverRuntimeConfig: {
+    PROJECT_ROOT: __dirname
   }
 }
 
