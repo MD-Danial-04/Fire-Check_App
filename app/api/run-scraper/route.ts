@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
+import playwright from 'playwright-core';
+import chromium from '@sparticuz/chromium';
 
 interface InventoryItem {
   name: string;
@@ -29,7 +30,7 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function loadSessionFromDatabase(context: any) {
+async function loadSessionFromDatabase(context: playwright.BrowserContext) {
   try {
     // Try to load the latest session state from Supabase
     const { data, error } = await supabase
@@ -142,13 +143,17 @@ async function processAndUpdateChecklist(items: any[]) {
 }
 
 async function runScraper() {
-  let browser = null;
+  let browser: playwright.Browser | null = null;
   try {
-    console.log('Starting browser...');
-    browser = await chromium.launch({
-      headless: true,
-      // Use minimal browser configuration for serverless
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    console.log('Starting browser using @sparticuz/chromium...');
+    
+    // Use sparticuz/chromium to get executable path and launch options
+    browser = await playwright.chromium.launch({
+      args: chromium.args,
+      executablePath: await chromium.executablePath(), // Dynamically get path
+      headless: chromium.headless, // Use recommended headless mode
+      // Remove specific sandbox args as sparticuz handles common ones
+      // args: ['--no-sandbox', '--disable-setuid-sandbox'] 
     });
     
     const context = await browser.newContext({
@@ -332,6 +337,8 @@ async function runScraper() {
       }
     }
     console.error('Scraper error:', error instanceof Error ? error.message : 'Unknown error');
+    // Ensure the full error is logged for debugging
+    console.error(error); 
     throw error;
   }
 }
