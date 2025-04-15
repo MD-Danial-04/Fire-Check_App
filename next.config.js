@@ -35,6 +35,11 @@ const nextConfig = {
       'undici': require('path').join(__dirname, 'lib', 'undici-shim.js')
     };
     
+    // Mark @sparticuz/chromium as external to prevent bundling
+    if (isServer) {
+      config.externals = [...(config.externals || []), '@sparticuz/chromium'];
+    }
+    
     return config;
   },
   // Configure for Playwright and serverless environment
