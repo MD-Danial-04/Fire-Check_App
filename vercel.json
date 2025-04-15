@@ -6,7 +6,12 @@
     "app/api/run-scraper/route.ts": {
       "memory": 1024,
       "maxDuration": 60,
-      "includeFiles": "node_modules/@sparticuz/chromium/bin/**"
+      "includeFiles": [
+        {
+          "src": "node_modules/@sparticuz/chromium/bin/**",
+          "dest": "chromium-assets"
+        }
+      ]
     }
   },
   "env": {
