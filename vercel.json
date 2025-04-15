@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npx playwright install --with-deps chromium && next build",
+  "buildCommand": "npx playwright install chromium --only && next build",
   "devCommand": "next dev",
   "installCommand": "npm install",
   "functions": {
