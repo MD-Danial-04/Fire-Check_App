@@ -150,10 +150,9 @@ async function runScraper() {
     // Use sparticuz/chromium to get executable path and launch options
     browser = await playwright.chromium.launch({
       args: chromium.args,
-      executablePath: await chromium.executablePath(), // Dynamically get path
-      headless: chromium.headless, // Use recommended headless mode
+      executablePath: await chromium.executablePath(), 
+      headless: true, // Explicitly set to true for serverless
       // Remove specific sandbox args as sparticuz handles common ones
-      // args: ['--no-sandbox', '--disable-setuid-sandbox'] 
     });
     
     const context = await browser.newContext({
