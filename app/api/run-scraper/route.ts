@@ -166,6 +166,20 @@ async function runScraper() {
     console.log(`Environment: ${isVercel ? 'Vercel' : 'Local'}`);
     console.log(`Node.js version: ${process.version}`);
     
+    if (isVercel) {
+      console.log('Vercel environment details:');
+      console.log('- VERCEL_ENV:', process.env.VERCEL_ENV);
+      console.log('- VERCEL_REGION:', process.env.VERCEL_REGION);
+      console.log('- PLAYWRIGHT_BROWSERS_PATH:', process.env.PLAYWRIGHT_BROWSERS_PATH);
+      try {
+        // Check if @sparticuz/chromium is accessible
+        console.log('- @sparticuz/chromium available:', !!chromium_path);
+        console.log('- chromium_path properties:', Object.keys(chromium_path));
+      } catch (error: any) {
+        console.log('- @sparticuz/chromium not accessible:', error.message);
+      }
+    }
+    
     console.log('Starting scraper...');
     
     // Load session data
@@ -188,11 +202,20 @@ async function runScraper() {
       // Use environment variable to control browser location in Vercel
       process.env.PLAYWRIGHT_BROWSERS_PATH = '0';
       
-      browser = await chromium.launch({
-        ...options,
-        executablePath: await chromium_path.executablePath(),
-        args: [...options.args, ...chromium_path.args],
-      });
+      try {
+        // Get executable path from @sparticuz/chromium
+        const executablePath = await chromium_path.executablePath();
+        console.log(`Using Chromium executable path: ${executablePath}`);
+        
+        browser = await chromium.launch({
+          ...options,
+          executablePath,
+          args: [...options.args, ...chromium_path.args],
+        });
+      } catch (error: any) {
+        console.error('Error launching browser with @sparticuz/chromium:', error);
+        throw new Error(`Failed to launch browser in Vercel environment: ${error.message}`);
+      }
     } else {
       browser = await chromium.launch(options);
     }

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "migrate": "node scripts/run-migrations.js",
-    "deploy": "vercel --prod"
+    "deploy": "vercel --prod",
+    "install-playwright": "node -e \"process.env.PLAYWRIGHT_BROWSERS_PATH='0'; require('child_process').execSync('npx playwright install chromium', {stdio: 'inherit'});\""
   },
   "dependencies": {
     "@fontsource/azeret-mono": "^5.1.1",
