@@ -208,9 +208,9 @@ async function runScraper() {
         console.log(`Using Chromium executable path: ${executablePath}`);
         
         browser = await chromium.launch({
-          ...options,
+          args: chromium_path.args,
           executablePath,
-          args: [...options.args, ...chromium_path.args],
+          headless: true,
         });
       } catch (error: any) {
         console.error('Error launching browser with @sparticuz/chromium:', error);
@@ -439,7 +439,15 @@ async function runScraper() {
     // Always close the browser to prevent resource leaks
     if (browser) {
       console.log('Closing browser...');
-      await browser.close();
+      try {
+        const contexts = browser.contexts();
+        for (const context of contexts) {
+          await context.close();
+        }
+        await browser.close();
+      } catch (error) {
+        console.error('Error closing browser:', error);
+      }
     }
   }
 }
