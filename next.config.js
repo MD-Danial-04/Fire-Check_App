@@ -32,7 +32,7 @@ const nextConfig = {
     // Fix for undici dependency issues on Vercel - apply to both server and client
     config.resolve.alias = {
       ...config.resolve.alias,
-      'undici': 'node-fetch'
+      'undici': require('path').join(__dirname, 'lib', 'undici-shim.js')
     };
     
     return config;
