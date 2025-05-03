@@ -112,6 +112,15 @@ export default function EquipmentChecklistPage() {
   // Add state to track item versions for conflict resolution
   const itemVersions = useRef<Record<string, number>>({});
 
+  // Add state for Add Vehicle dialog
+  const [isAddVehicleDialogOpen, setIsAddVehicleDialogOpen] = useState(false);
+  const [newVehicleName, setNewVehicleName] = useState("");
+  const [newPlateNumber, setNewPlateNumber] = useState("");
+
+  // Add state for remove vehicle dialog
+  const [isRemoveVehicleDialogOpen, setIsRemoveVehicleDialogOpen] = useState(false);
+  const [vehicleToRemove, setVehicleToRemove] = useState<{ itemId: number; name: string } | null>(null);
+
   // Fetch personnel data efficiently
   useEffect(() => {
     async function fetchPersonnel() {
@@ -1445,6 +1454,101 @@ export default function EquipmentChecklistPage() {
     return pendingUpdates.has(itemKey);
   }, [sections, pendingUpdates]);
 
+  // Add handler for adding a vehicle to both FPT and LPT
+  const handleAddVehicle = async () => {
+    if (!newVehicleName.trim() || !newPlateNumber.trim()) return;
+    setIsSaving(true);
+    try {
+      // Find max item_id in both VEHICLE FPT and VEHICLE LPT
+      const { data: fpt, error: fptError } = await supabase
+        .from('equipment_checklist')
+        .select('item_id')
+        .eq('section', 'VEHICLE FPT')
+        .order('item_id', { ascending: false })
+        .limit(1);
+      const { data: lpt, error: lptError } = await supabase
+        .from('equipment_checklist')
+        .select('item_id')
+        .eq('section', 'VEHICLE LPT')
+        .order('item_id', { ascending: false })
+        .limit(1);
+      if (fptError || lptError) {
+        toast({ title: 'Error', description: 'Failed to fetch vehicle IDs', variant: 'destructive' });
+        setIsSaving(false);
+        return;
+      }
+      const maxFpt = fpt?.[0]?.item_id || 0;
+      const maxLpt = lpt?.[0]?.item_id || 0;
+      const nextItemId = Math.max(maxFpt, maxLpt) + 1;
+      const name = `${newVehicleName.trim()} (${newPlateNumber.trim()})`;
+      const now = new Date().toISOString();
+      const { error: insertError } = await supabase
+        .from('equipment_checklist')
+        .insert([
+          {
+            section: 'VEHICLE FPT',
+            item_id: nextItemId,
+            name,
+            checked: false,
+            assigned_to: null,
+            status: null,
+            identifier: null,
+            created_at: now,
+            updated_at: now,
+          },
+          {
+            section: 'VEHICLE LPT',
+            item_id: nextItemId,
+            name,
+            checked: false,
+            assigned_to: null,
+            status: null,
+            identifier: null,
+            created_at: now,
+            updated_at: now,
+          }
+        ]);
+      if (insertError) {
+        toast({ title: 'Error', description: 'Failed to add vehicle', variant: 'destructive' });
+        setIsSaving(false);
+        return;
+      }
+      setIsAddVehicleDialogOpen(false);
+      setNewVehicleName("");
+      setNewPlateNumber("");
+      await fetchEquipmentData();
+      toast({ title: 'Success', description: 'Vehicle added to both FPT and LPT.' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'Unexpected error adding vehicle', variant: 'destructive' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handler to remove vehicle from both VEHICLE FPT and VEHICLE LPT
+  const handleRemoveVehicle = async () => {
+    if (!vehicleToRemove) return;
+    setIsSaving(true);
+    try {
+      await supabase
+        .from('equipment_checklist')
+        .delete()
+        .in('section', ['VEHICLE FPT', 'VEHICLE LPT'])
+        .eq('item_id', vehicleToRemove.itemId);
+      setIsRemoveVehicleDialogOpen(false);
+      setVehicleToRemove(null);
+      await fetchEquipmentData();
+      // Ensure dialogs are closed before showing toast (fix for mobile)
+      setTimeout(() => {
+        toast({ title: 'Vehicle removed.', duration: 2000 });
+      }, 150);
+    } catch (e) {
+      toast({ title: 'Error', description: 'Failed to remove vehicle', variant: 'destructive', duration: 3000 });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="container mx-auto py-3 sm:py-6 px-3 sm:px-6">
       {/* Remove inline debug logging */}
@@ -1534,6 +1638,17 @@ export default function EquipmentChecklistPage() {
                         <span className="hidden sm:inline">Open Vehicle Form</span>
                         <span className="sm:hidden">Form</span>
                       </Link>
+                    </Button>
+                  )}
+                  {(section.title === "VEHICLE FPT" || section.title === "VEHICLE LPT") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 flex items-center gap-1 sm:gap-2 border-green-500 text-green-600 hover:bg-green-50 dark:border-green-400 dark:text-green-400 dark:hover:bg-green-900/20"
+                      onClick={() => setIsAddVehicleDialogOpen(true)}
+                      aria-label="Add Vehicle"
+                    >
+                      + Add Vehicle
                     </Button>
                   )}
                 </div>
@@ -1653,8 +1768,8 @@ export default function EquipmentChecklistPage() {
                                     <SelectContent>
                                       {Object.entries(personnelGroups)
                                         .filter(([group]) => {
-                                          // For MRV EMT Bag items, only show REGULARS
-                                          if (item.name.includes("MRV EMT Bag")) {
+                                          // For MRV811 EMT Bag 1 and 2, only show REGULARS
+                                          if (["MRV811 EMT Bag 1", "MRV811 EMT Bag 2"].includes(item.name.trim())) {
                                             return group === "REGULARS";
                                           }
                                           // For other Armoury items, exclude REGULARS
@@ -1894,9 +2009,11 @@ export default function EquipmentChecklistPage() {
                                     <SelectContent>
                                       {Object.entries(personnelGroups)
                                         .filter(([group]) => {
-                                          if (item.name.includes("MRV EMT Bag")) {
+                                          // For MRV811 EMT Bag 1 and 2, only show REGULARS
+                                          if (["MRV811 EMT Bag 1", "MRV811 EMT Bag 2"].includes(item.name.trim())) {
                                             return group === "REGULARS";
                                           }
+                                          // For other Armoury items, exclude REGULARS
                                           return group !== "REGULARS";
                                         })
                                         .map(([group, members]) => (
@@ -2263,20 +2380,115 @@ export default function EquipmentChecklistPage() {
                 </div>
               )}
             </div>
+            <DialogFooter className="sm:justify-end gap-2 sm:gap-3 flex flex-col sm:flex-row">
+              <div className="flex-1 flex flex-row-reverse gap-2 sm:gap-3">
+                <Button 
+                  onClick={handleSaveVehicle} 
+                  disabled={isSaving}
+                  className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+                >
+                  {isSaving ? 'Saving...' : 'Save Changes'}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setIsEditVehicleDialogOpen(false)}
+                  className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+                >
+                  Cancel
+                </Button>
+              </div>
+              {editingVehicle && (sections[editingVehicle.sectionIndex]?.title === "VEHICLE FPT" || sections[editingVehicle.sectionIndex]?.title === "VEHICLE LPT") && (
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setVehicleToRemove({ itemId: sections[editingVehicle.sectionIndex].items[editingVehicle.itemIndex].id, name: sections[editingVehicle.sectionIndex].items[editingVehicle.itemIndex].name });
+                    setIsEditVehicleDialogOpen(false);
+                    setIsRemoveVehicleDialogOpen(true);
+                  }}
+                  disabled={isSaving}
+                  className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3 mt-2 sm:mt-0"
+                >
+                  Remove Vehicle
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add the Add Vehicle Dialog at the bottom of the component */}
+        <Dialog open={isAddVehicleDialogOpen} onOpenChange={setIsAddVehicleDialogOpen}>
+          <DialogContent className="max-w-[90%] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-base sm:text-lg">Add Vehicle to FPT & LPT</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                This will add a new vehicle to both VEHICLE FPT and VEHICLE LPT sections with the same item ID.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2 sm:py-4">
+              <div className="space-y-1 sm:space-y-2">
+                <Label htmlFor="add-vehicle-name" className="text-xs sm:text-sm">Vehicle Name</Label>
+                <Input
+                  id="add-vehicle-name"
+                  value={newVehicleName}
+                  onChange={e => setNewVehicleName(e.target.value)}
+                  placeholder="e.g., CFS FRC"
+                  className="h-8 sm:h-10 text-xs sm:text-sm"
+                />
+              </div>
+              <div className="space-y-1 sm:space-y-2">
+                <Label htmlFor="add-vehicle-plate" className="text-xs sm:text-sm">Plate Number</Label>
+                <Input
+                  id="add-vehicle-plate"
+                  value={newPlateNumber}
+                  onChange={e => setNewPlateNumber(e.target.value)}
+                  placeholder="e.g., QX1859E"
+                  className="h-8 sm:h-10 text-xs sm:text-sm"
+                />
+              </div>
+            </div>
             <DialogFooter className="sm:justify-end gap-2 sm:gap-3">
-              <Button 
-                variant="outline" 
-                onClick={() => setIsEditVehicleDialogOpen(false)}
+              <Button
+                variant="outline"
+                onClick={() => setIsAddVehicleDialogOpen(false)}
                 className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
               >
                 Cancel
               </Button>
-              <Button 
-                onClick={handleSaveVehicle} 
+              <Button
+                onClick={handleAddVehicle}
+                disabled={isSaving || !newVehicleName.trim() || !newPlateNumber.trim()}
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+              >
+                {isSaving ? 'Adding...' : 'Add Vehicle'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Remove Vehicle Dialog at the bottom of the component */}
+        <Dialog open={isRemoveVehicleDialogOpen} onOpenChange={setIsRemoveVehicleDialogOpen}>
+          <DialogContent className="max-w-[90%] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle>Remove Vehicle</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to remove <b>{vehicleToRemove?.name}</b> from both VEHICLE FPT and VEHICLE LPT? This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="sm:justify-end gap-2 sm:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setIsRemoveVehicleDialogOpen(false)}
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleRemoveVehicle}
                 disabled={isSaving}
                 className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
               >
-                {isSaving ? 'Saving...' : 'Save Changes'}
+                {isSaving ? 'Removing...' : 'Remove'}
               </Button>
             </DialogFooter>
           </DialogContent>
