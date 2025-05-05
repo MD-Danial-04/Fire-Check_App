@@ -109,10 +109,25 @@ async function processAndUpdateChecklist(items: ScrapedItem[]) {
       const mappedItem = itemMapping[itemKey];
       
       if (!mappedItem) {
+        console.log(`Skipping unmapped item: ${itemKey}`);
         skippedCount++;
         continue;
       }
-      
+
+      // Get existing item from database
+      const { data: existingItem, error: fetchError } = await supabase
+        .from('equipment_checklist')
+        .select('*')
+        .eq('section', 'ARMOURY')
+        .eq('item_id', mappedItem.id)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        console.error(`Error fetching existing item ${mappedItem.name}:`, fetchError);
+        errorCount++;
+        continue;
+      }
+
       // Create the checklist item
       const checklistItem: ChecklistItem = {
         section: 'ARMOURY',
@@ -123,6 +138,30 @@ async function processAndUpdateChecklist(items: ScrapedItem[]) {
         identifier: null,
         assigned_to: null
       };
+
+      // Compare with existing item
+      const shouldUpdate = !existingItem || 
+        existingItem.checked !== checklistItem.checked ||
+        existingItem.status !== checklistItem.status;
+
+      // Log comparison details
+      console.log(`Comparing item ${checklistItem.name}:`, {
+        existing: existingItem ? {
+          checked: existingItem.checked,
+          status: existingItem.status
+        } : 'No existing item',
+        new: {
+          checked: checklistItem.checked,
+          status: checklistItem.status
+        },
+        shouldUpdate
+      });
+
+      if (!shouldUpdate) {
+        console.log(`Skipping unchanged item: ${checklistItem.name}`);
+        skippedCount++;
+        continue;
+      }
       
       // Update or insert the item in Supabase
       const { error } = await supabase
@@ -139,6 +178,7 @@ async function processAndUpdateChecklist(items: ScrapedItem[]) {
         errorCount++;
         console.error(`Error updating item ${checklistItem.name}:`, error.message);
       } else {
+        console.log(`Successfully updated item: ${checklistItem.name}`);
         updatedCount++;
       }
     } catch (error) {
