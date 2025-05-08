@@ -213,14 +213,16 @@ export default function EquipmentChecklistPage() {
           const rank = name.split(' ')[0].toUpperCase();
           const rankOrder: { [key: string]: number } = {
             // Regulars
-            'LTA': 1,
-            'WO2': 2,
-            'WO1': 3,
-            'SGT3': 4,
+            'CPT': 1,
+            'LTA': 2,
+            'WO2': 3,
+            'WO1': 4,
+            'SGT3': 5,
+            'SGT2': 6,
             // Firefighters
-            'SGT1': 1,
-            'CPL': 2,
-            'LCP': 3
+            'SGT1': 7,
+            'CPL': 8,
+            'LCP': 9
           };
           return rankOrder[rank] || 999; // Default high number for unknown ranks
         };
@@ -228,7 +230,13 @@ export default function EquipmentChecklistPage() {
         // Sort each group
         Object.keys(grouped).forEach(category => {
           grouped[category].sort((a, b) => {
-            return getRankOrder(a) - getRankOrder(b);
+            const orderA = getRankOrder(a);
+            const orderB = getRankOrder(b);
+            if (orderA !== orderB) return orderA - orderB;
+            // If same rank, sort alphabetically by name (excluding rank)
+            const nameA = a.split(' ').slice(1).join(' ').toUpperCase();
+            const nameB = b.split(' ').slice(1).join(' ').toUpperCase();
+            return nameA.localeCompare(nameB);
           });
         });
 
