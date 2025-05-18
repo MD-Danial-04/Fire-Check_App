@@ -121,6 +121,14 @@ export default function EquipmentChecklistPage() {
   const [isRemoveVehicleDialogOpen, setIsRemoveVehicleDialogOpen] = useState(false);
   const [vehicleToRemove, setVehicleToRemove] = useState<{ itemId: number; name: string } | null>(null);
 
+  // Add state for Add BWC dialog
+  const [isAddBwcDialogOpen, setIsAddBwcDialogOpen] = useState(false);
+  const [newBwcSerial, setNewBwcSerial] = useState("");
+  const [isAddingBwc, setIsAddingBwc] = useState(false);
+  // Add state for Remove BWC dialog
+  const [isRemoveBwcDialogOpen, setIsRemoveBwcDialogOpen] = useState(false);
+  const [bwcToRemove, setBwcToRemove] = useState<{ itemId: number; name: string } | null>(null);
+
   // Fetch personnel data efficiently
   useEffect(() => {
     async function fetchPersonnel() {
@@ -422,6 +430,8 @@ export default function EquipmentChecklistPage() {
         { id: 7, name: "F9144 1494", checked: false },
         { id: 8, name: "F9144 1507", checked: false },
         { id: 9, name: "F9251 5515", checked: false },
+        { id: 10, name: "FX7508623", checked: false },
+        { id: 11, name: "FX7508614", checked: false },
       ]
     }
   ]);
@@ -467,6 +477,8 @@ export default function EquipmentChecklistPage() {
           { id: 7, name: "F9144 1494", checked: false },
           { id: 8, name: "F9144 1507", checked: false },
           { id: 9, name: "F9251 5515", checked: false },
+          { id: 10, name: "FX7508623", checked: false },
+          { id: 11, name: "FX7508614", checked: false },
         ]
       };
       
@@ -1660,6 +1672,18 @@ export default function EquipmentChecklistPage() {
                       + Add Vehicle
                     </Button>
                   )}
+                  {section.title === "BWC" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 flex items-center gap-1 sm:gap-2 border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/20"
+                      onClick={() => setIsAddBwcDialogOpen(true)}
+                      aria-label="Add BWC"
+                      disabled={isAddingBwc}
+                    >
+                      + Add BWC
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="p-0">
@@ -2389,8 +2413,8 @@ export default function EquipmentChecklistPage() {
                 </div>
               )}
             </div>
-            <DialogFooter className="sm:justify-end gap-2 sm:gap-3 flex flex-col sm:flex-row">
-              <div className="flex-1 flex flex-row-reverse gap-2 sm:gap-3">
+            <DialogFooter className="flex flex-col gap-2 sm:gap-3">
+              <div className="flex flex-row-reverse gap-2 sm:gap-3 w-full">
                 <Button 
                   onClick={handleSaveVehicle} 
                   disabled={isSaving}
@@ -2406,6 +2430,20 @@ export default function EquipmentChecklistPage() {
                   Cancel
                 </Button>
               </div>
+              {editingVehicle && sections[editingVehicle.sectionIndex]?.title === "BWC" && (
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setBwcToRemove({ itemId: sections[editingVehicle.sectionIndex].items[editingVehicle.itemIndex].id, name: sections[editingVehicle.sectionIndex].items[editingVehicle.itemIndex].name });
+                    setIsEditVehicleDialogOpen(false);
+                    setIsRemoveBwcDialogOpen(true);
+                  }}
+                  disabled={isSaving}
+                  className="w-full mt-2 h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+                >
+                  Remove BWC
+                </Button>
+              )}
               {editingVehicle && (sections[editingVehicle.sectionIndex]?.title === "VEHICLE FPT" || sections[editingVehicle.sectionIndex]?.title === "VEHICLE LPT") && (
                 <Button
                   variant="destructive"
@@ -2415,7 +2453,7 @@ export default function EquipmentChecklistPage() {
                     setIsRemoveVehicleDialogOpen(true);
                   }}
                   disabled={isSaving}
-                  className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3 mt-2 sm:mt-0"
+                  className="w-full mt-2 h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
                 >
                   Remove Vehicle
                 </Button>
@@ -2494,6 +2532,136 @@ export default function EquipmentChecklistPage() {
               <Button
                 variant="destructive"
                 onClick={handleRemoveVehicle}
+                disabled={isSaving}
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+              >
+                {isSaving ? 'Removing...' : 'Remove'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add BWC Dialog */}
+        <Dialog open={isAddBwcDialogOpen} onOpenChange={setIsAddBwcDialogOpen}>
+          <DialogContent className="max-w-[90%] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle className="text-base sm:text-lg">Add BWC Serial Number</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                This will add a new BWC entry to the checklist with the next available ID.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 py-2 sm:py-4">
+              <div className="space-y-1 sm:space-y-2">
+                <Label htmlFor="add-bwc-serial" className="text-xs sm:text-sm">Serial Number</Label>
+                <Input
+                  id="add-bwc-serial"
+                  value={newBwcSerial}
+                  onChange={e => setNewBwcSerial(e.target.value)}
+                  placeholder="e.g., FX7508623"
+                  className="h-8 sm:h-10 text-xs sm:text-sm"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <DialogFooter className="sm:justify-end gap-2 sm:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setIsAddBwcDialogOpen(false)}
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (!newBwcSerial.trim()) return;
+                  setIsAddingBwc(true);
+                  try {
+                    // Find max item_id in BWC section
+                    const { data: bwcItems, error: bwcError } = await supabase
+                      .from('equipment_checklist')
+                      .select('item_id')
+                      .eq('section', 'BWC')
+                      .order('item_id', { ascending: false })
+                      .limit(1);
+                    if (bwcError) throw bwcError;
+                    const maxId = bwcItems?.[0]?.item_id || 0;
+                    const nextId = maxId + 1;
+                    const now = new Date().toISOString();
+                    const { error: insertError } = await supabase
+                      .from('equipment_checklist')
+                      .insert([
+                        {
+                          section: 'BWC',
+                          item_id: nextId,
+                          name: newBwcSerial.trim(),
+                          checked: false,
+                          assigned_to: null,
+                          status: null,
+                          identifier: null,
+                          created_at: now,
+                          updated_at: now,
+                        }
+                      ]);
+                    if (insertError) throw insertError;
+                    setIsAddBwcDialogOpen(false);
+                    setNewBwcSerial("");
+                    await fetchEquipmentData();
+                    toast({ title: 'Success', description: 'BWC added.' });
+                  } catch (e) {
+                    toast({ title: 'Error', description: 'Failed to add BWC', variant: 'destructive' });
+                  } finally {
+                    setIsAddingBwc(false);
+                  }
+                }}
+                disabled={isAddingBwc || !newBwcSerial.trim()}
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+              >
+                {isAddingBwc ? 'Adding...' : 'Add BWC'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Remove BWC Dialog at the bottom of the component */}
+        <Dialog open={isRemoveBwcDialogOpen} onOpenChange={setIsRemoveBwcDialogOpen}>
+          <DialogContent className="max-w-[90%] sm:max-w-md p-4 sm:p-6">
+            <DialogHeader className="space-y-2">
+              <DialogTitle>Remove BWC</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to remove <b>{bwcToRemove?.name}</b> from BWC? This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="sm:justify-end gap-2 sm:gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setIsRemoveBwcDialogOpen(false)}
+                className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  if (!bwcToRemove) return;
+                  setIsSaving(true);
+                  try {
+                    await supabase
+                      .from('equipment_checklist')
+                      .delete()
+                      .eq('section', 'BWC')
+                      .eq('item_id', bwcToRemove.itemId);
+                    setIsRemoveBwcDialogOpen(false);
+                    setBwcToRemove(null);
+                    await fetchEquipmentData();
+                    setTimeout(() => {
+                      toast({ title: 'BWC removed.', duration: 2000 });
+                    }, 150);
+                  } catch (e) {
+                    toast({ title: 'Error', description: 'Failed to remove BWC', variant: 'destructive', duration: 3000 });
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
                 disabled={isSaving}
                 className="h-8 sm:h-9 text-xs sm:text-sm px-2 sm:px-3"
               >
