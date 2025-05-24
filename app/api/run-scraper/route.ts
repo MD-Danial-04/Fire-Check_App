@@ -228,6 +228,128 @@ async function retryOperation<T>(
   throw lastError;
 }
 
+// Ensure RESOURCE_CONFIG is defined (copy from previous definition if missing)
+const RESOURCE_CONFIG = {
+  browser: {
+    timeout: 30000, // 30 seconds
+    maxConcurrentPages: 1,
+    viewport: { width: 1280, height: 800 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0'
+  },
+  operation: {
+    pageLoadTimeout: 30000,
+    elementWaitTimeout: 5000,
+    navigationTimeout: 20000,
+    cleanupTimeout: 5000
+  }
+};
+
+// Ensure BrowserError is defined (copy from previous code if missing)
+class BrowserError extends Error {
+  constructor(message: string, details?: any) {
+    super(message);
+    this.name = 'BrowserError';
+    (this as any).details = details;
+  }
+}
+
+class ResourceManager {
+  private browser: any = null;
+  private contexts: any[] = [];
+  private pages: any[] = [];
+  private cleanupTimer: NodeJS.Timeout | null = null;
+
+  constructor(private config = RESOURCE_CONFIG) {}
+
+  async initializeBrowser() {
+    try {
+      const isVercel = process.env.VERCEL === '1';
+      const options = {
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+      };
+
+      // Add Vercel environment logging (from File A)
+      console.log(`Environment: ${isVercel ? 'Vercel' : 'Local'}`);
+      console.log(`Node.js version: ${process.version}`);
+      if (isVercel) {
+        console.log('Vercel environment details:');
+        console.log('- VERCEL_ENV:', process.env.VERCEL_ENV);
+        console.log('- VERCEL_REGION:', process.env.VERCEL_REGION);
+        console.log('- PLAYWRIGHT_BROWSERS_PATH:', process.env.PLAYWRIGHT_BROWSERS_PATH);
+        try {
+          console.log('- @sparticuz/chromium available:', !!chromium_path);
+          console.log('- chromium_path properties:', Object.keys(chromium_path));
+        } catch (error: any) {
+          console.log('- @sparticuz/chromium not accessible:', error.message);
+        }
+      }
+
+      if (isVercel) {
+        process.env.PLAYWRIGHT_BROWSERS_PATH = '0';
+        const executablePath = await chromium_path.executablePath();
+        console.log(`Using Chromium executable path: ${executablePath}`);
+        this.browser = await chromium.launch({
+          args: chromium_path.args,
+          executablePath,
+          headless: true,
+        });
+      } else {
+        this.browser = await chromium.launch(options);
+      }
+
+      this.setupCleanupTimer();
+      return this.browser;
+    } catch (error: any) {
+      throw new BrowserError('Failed to initialize browser', {
+        error,
+        operation: 'initializeBrowser'
+      });
+    }
+  }
+
+  async createContext() {
+    try {
+      // Use the same context options as File A
+      const context = await this.browser.newContext({
+        viewport: { width: 1280, height: 800 },
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0',
+        extraHTTPHeaders: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Sec-GPC': '1',
+          'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'cross-site',
+          'Sec-Fetch-User': '?1',
+          'Priority': 'u=0, i'
+        }
+      });
+      this.contexts.push(context);
+      return context;
+    } catch (error: any) {
+      throw new BrowserError('Failed to create browser context', {
+        error,
+        operation: 'createContext'
+      });
+    }
+  }
+
+  private setupCleanupTimer() {
+    if (this.cleanupTimer) {
+      clearTimeout(this.cleanupTimer);
+    }
+    this.cleanupTimer = setTimeout(() => {
+      this.cleanup().catch(console.error);
+    }, this.config.operation.cleanupTimeout);
+  }
+
+  async cleanup() {
+    // ... keep existing cleanup logic ...
+  }
+}
+
 async function runScraper() {
   // Define browser as null so we can close it properly later
   let browser = null;
