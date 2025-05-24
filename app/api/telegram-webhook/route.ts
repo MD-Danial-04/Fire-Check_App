@@ -133,12 +133,8 @@ async function updateVehicleStatus(
       if (mapping.section !== `VEHICLE ${section}`) return false;
       const match = mapping.name.match(/^(.*)\(([^)]+)\)$/);
       if (!match) return false;
-      const dbType = match[1].trim();
       const dbPlate = match[2].trim().toUpperCase();
-      return (
-        dbPlate === plateNumber &&
-        (dbType.toUpperCase().includes(vehicleType.toUpperCase()) || vehicleType.toUpperCase().includes(dbType.toUpperCase()))
-      );
+      return dbPlate === plateNumber;
     });
     if (!vehicleInfo) return false;
     const { error } = await supabase
