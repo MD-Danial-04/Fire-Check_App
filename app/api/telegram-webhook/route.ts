@@ -37,6 +37,9 @@ let vehicleMappingsCache: VehicleInfo[] = [];
 let lastCacheUpdate: number = 0;
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+// Track unauthorized chat IDs to avoid log flooding
+const unauthorizedChatLogSet = new Set<number>();
+
 // Function to fetch vehicle mappings from database
 async function getVehicleMappings(): Promise<VehicleInfo[]> {
   const now = Date.now();
@@ -190,10 +193,12 @@ export async function POST(request: NextRequest) {
     if (!update.message || 
         !['group', 'supergroup'].includes(update.message.chat.type) || 
         update.message.chat.id.toString() !== ALLOWED_GROUP_ID) {
-      if (process.env.NODE_ENV !== 'production') {
-        console.warn('Unauthorized or invalid chat:', update.message?.chat);
+      const chatId = update.message?.chat?.id;
+      if (chatId && !unauthorizedChatLogSet.has(chatId)) {
+        console.info('Unauthorized or invalid chat:', update.message?.chat);
+        unauthorizedChatLogSet.add(chatId);
       }
-      return NextResponse.json({ status: 'unauthorized' }, { status: 401 });
+      return NextResponse.json({ status: 'unauthorized' }, { status: 200 });
     }
     const messageText = update.message.text;
     if (!messageText) {
@@ -226,9 +231,8 @@ export async function POST(request: NextRequest) {
       // Always return 200 OK so Telegram will deliver the next update
       return NextResponse.json({ status: 'db update failed but ignored' }, { status: 200 });
     }
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('Database update success for:', parsedInfo);
-    }
+    // Always log successful updates
+    console.info('Database update success for:', parsedInfo);
     return NextResponse.json({ status: 'success' });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
