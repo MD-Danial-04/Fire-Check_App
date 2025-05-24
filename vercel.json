@@ -10,5 +10,11 @@
   },
   "env": {
     "PLAYWRIGHT_BROWSERS_PATH": "0"
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/run-scraper",
+      "schedule": "0 6 * * *"
+    }
+  ]
 } 
