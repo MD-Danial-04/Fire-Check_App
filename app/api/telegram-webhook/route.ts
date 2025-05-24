@@ -136,7 +136,11 @@ async function updateVehicleStatus(
       const dbPlate = match[2].trim().toUpperCase();
       return dbPlate === plateNumber;
     });
-    if (!vehicleInfo) return false;
+    if (!vehicleInfo) {
+      console.warn('No matching vehicle found for plate:', plateNumber, 'in section:', section);
+      // Always return 200 OK so Telegram will deliver the next update
+      return true;
+    }
     const { error } = await supabase
       .from('equipment_checklist')
       .upsert({
@@ -198,7 +202,8 @@ export async function POST(request: NextRequest) {
     );
     if (!success) {
       console.error('Database update failed for:', parsedInfo);
-      return NextResponse.json({ status: 'database update failed' }, { status: 500 });
+      // Always return 200 OK so Telegram will deliver the next update
+      return NextResponse.json({ status: 'db update failed but ignored' }, { status: 200 });
     }
     console.log('Database update success for:', parsedInfo);
     return NextResponse.json({ status: 'success' });
