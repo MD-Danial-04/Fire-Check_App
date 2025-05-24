@@ -673,7 +673,7 @@ async function runScraper() {
     // Create page and navigate
     const page = await resourceManager.createPage(context);
     // Set up timeout for page load
-    const pageLoadPromise = page.goto('https://armoury.gov.sg/lists', {
+    const pageLoadPromise = page.goto('https://example.com', {
       waitUntil: 'domcontentloaded',
       timeout: RESOURCE_CONFIG.operation.pageLoadTimeout
     });
@@ -704,38 +704,48 @@ async function runScraper() {
       throw new Error('Session expired or invalid - detected login page');
     }
     // Find View all element using a robust selector
-    console.log('Looking for "View all" element...');
-    let viewAllElement = null;
+    console.log('Looking for test element on example.com...');
+    let testElement = null;
     for (let i = 0; i < 20; i++) {
       try {
-        const viewAllElements = await page.$$('p.chakra-text.css-10ahl1q');
-        for (const el of viewAllElements) {
-          const text = await el.textContent();
-          if (text && text.trim().toLowerCase().startsWith('view all')) {
-            viewAllElement = el;
+        // Looking for the h1 tag on example.com
+        testElement = await page.$('h1');
+        if (testElement) {
+          const text = await testElement.textContent();
+          if (text && text.trim().toLowerCase().includes('example domain')) {
+            console.log('Found test element (h1) on example.com');
             break;
           }
         }
-        if (viewAllElement) break;
+        if (testElement) break;
         await page.waitForTimeout(500);
       } catch (err) {
         if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string' && err.message.includes('has been closed')) {
-          console.error('Page or browser was closed during View all search loop.');
+          console.error('Page or browser was closed during test element search loop.');
           break;
         }
         throw err;
       }
     }
-    if (!viewAllElement) {
+    if (!testElement) {
       let htmlSnippet = '';
       try {
         htmlSnippet = await page.content();
       } catch (err) {
         htmlSnippet = 'Page closed, no HTML available';
       }
-      console.error('Could not find "View all" element after waiting. HTML snippet:', htmlSnippet.slice(0, 1000));
-      throw new Error('Could not find "View all" link after waiting');
+      console.error('Could not find test element (h1) on example.com after waiting. HTML snippet:', htmlSnippet.slice(0, 1000));
+      throw new Error('Could not find test element (h1) on example.com after waiting');
     }
+    console.log('Successfully found test element on example.com, skipping actual scraping for this test.');
+    // For this test, we'll just return a success message without scraping further.
+    return {
+      items: [],
+      updateResult: { updatedCount: 0, skippedCount: 0, errorCount: 0 },
+      executionTime: Date.now() - startTime
+    };
+    // Commenting out the original scraping logic for this test
+    /*
     console.log('Clicking "View all" element and waiting for content to load...');
     await viewAllElement.click();
     // Wait for the content to be fully loaded
@@ -879,6 +889,7 @@ async function runScraper() {
       updateResult: result,
       executionTime: Date.now() - startTime
     };
+    */
   } catch (err) {
     error = err;
     console.error('Scraper error:', err instanceof Error ? err.message : 'Unknown error');
