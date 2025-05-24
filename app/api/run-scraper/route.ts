@@ -704,194 +704,186 @@ async function runScraper() {
       throw new Error('Session expired or invalid - detected login page');
     }
     
-    // Find View all element using the exact selectors from the example
+    // Find View all element using a robust selector
     console.log('Looking for "View all" element...');
-    const buttonSelectors = [
-      'p.chakra-text.css-10ahl1q:has-text("View all")',
-      'p.chakra-text:has-text("View all")',
-      'p:has-text("View all")'
-    ];
-    
+    const viewAllElements = await page.$$('p.chakra-text.css-10ahl1q');
     let viewAllElement = null;
-    for (const selector of buttonSelectors) {
-      try {
-        viewAllElement = await page.waitForSelector(selector, { timeout: 5000 });
-        if (viewAllElement) {
-          console.log(`Found "View all" element with selector: ${selector}`);
-          break;
-        }
-      } catch (error) {
-        // Continue to next selector
+    for (const el of viewAllElements) {
+      const text = await el.textContent();
+      if (text && text.trim().startsWith('View all')) {
+        viewAllElement = el;
+        break;
       }
     }
+
+    if (!viewAllElement) {
+      console.error('Could not find "View all" element.');
+      throw new Error('Could not find "View all" link after trying multiple selectors');
+    }
     
-    if (viewAllElement) {
-      console.log('Clicking "View all" element and waiting for content to load...');
-      await viewAllElement.click();
-      
-      // Wait for the content to be fully loaded
-      await page.waitForTimeout(2000); // Initial wait for content to start loading
-      
-      // Wait for the items to be present and stable
-      await page.waitForFunction(
-        () => {
-          const items = document.querySelectorAll('.css-8krjsn');
-          return items.length > 0 && Array.from(items).every(item => {
-            const element = item as HTMLElement;
-            return element.offsetParent !== null;
-          });
-        },
-        { timeout: 10000 }
-      );
-      
-      console.log('Reading items...');
-      const items = await page.$$('.css-8krjsn');
-      console.log(`Found ${items.length} items with class .css-8krjsn`);
-      
-      const processedItems: ScrapedItem[] = [];
-      
-      for (let i = 0; i < items.length; i++) {
-        try {
-          // Get fresh reference to items on each iteration
-          const currentItems = await page.$$('.css-8krjsn');
-          if (i >= currentItems.length) {
-            console.log(`Item ${i} no longer available, skipping...`);
-            continue;
+    console.log('Clicking "View all" element and waiting for content to load...');
+    await viewAllElement.click();
+    
+    // Wait for the content to be fully loaded
+    await page.waitForTimeout(2000); // Initial wait for content to start loading
+    
+    // Wait for the items to be present and stable
+    await page.waitForFunction(
+      () => {
+        const items = document.querySelectorAll('.css-8krjsn');
+        return items.length > 0 && Array.from(items).every(item => {
+          const element = item as HTMLElement;
+          return element.offsetParent !== null;
+        });
+      },
+      { timeout: 10000 }
+    );
+    
+    console.log('Reading items...');
+    const items = await page.$$('.css-8krjsn');
+    console.log(`Found ${items.length} items with class .css-8krjsn`);
+    
+    const processedItems: ScrapedItem[] = [];
+    
+    for (let i = 0; i < items.length; i++) {
+      try {
+        // Get fresh reference to items on each iteration
+        const currentItems = await page.$$('.css-8krjsn');
+        if (i >= currentItems.length) {
+          console.log(`Item ${i} no longer available, skipping...`);
+          continue;
+        }
+        
+        const item = currentItems[i];
+        
+        // Wait for the item to be visible with retry
+        await retryOperation(
+          async () => {
+            await item.waitForElementState('visible', { timeout: 5000 });
+          },
+          3,  // max retries
+          1000 // delay between retries
+        );
+        
+        // Get the title with retry logic
+        const title = await retryOperation(async () => {
+          const titleElement = await item.$('p.chakra-text.css-qlwhay');
+          if (!titleElement) {
+            throw new Error('Title element not found');
           }
-          
-          const item = currentItems[i];
-          
-          // Wait for the item to be visible with retry
-          await retryOperation(
-            async () => {
-              await item.waitForElementState('visible', { timeout: 5000 });
-            },
-            3,  // max retries
-            1000 // delay between retries
-          );
-          
-          // Get the title with retry logic
-          const title = await retryOperation(async () => {
-            const titleElement = await item.$('p.chakra-text.css-qlwhay');
-            if (!titleElement) {
-              throw new Error('Title element not found');
-            }
-            return await getTextContent(titleElement);
-          });
-          
-          // Get the current item's position
-          const itemIndex = await page.evaluate((el: Element) => {
-            const allItems = Array.from(document.querySelectorAll('.css-8krjsn'));
-            return allItems.indexOf(el);
-          }, item);
-          
-          // Wait for the details div to be visible with retry
-          await retryOperation(
-            async () => {
-              await page.waitForFunction(
-                (index: number) => {
-                  const items = document.querySelectorAll('.css-8krjsn');
-                  if (items[index]) {
-                    const detailsDiv = items[index].nextElementSibling as HTMLElement;
-                    return detailsDiv && detailsDiv.offsetParent !== null;
-                  }
-                  return false;
-                },
-                itemIndex,
-                { timeout: 5000 }
-              );
-            },
-            3,
-            1000
-          );
-          
-          // Get status with retry logic
-          const status = await retryOperation(async () => {
-            const statusSelectors = [
-              '.css-1jcdzpd p.chakra-text',
-              '.css-o5vkw1 p.chakra-text',
-              '.css-181ukw4 p.chakra-text',
-              'p.chakra-text' // Fallback selector
-            ];
-            
-            for (const selector of statusSelectors) {
-              const statusElement = await page.evaluate(
-                (data: any) => {
-                  const { selector, index } = data;
-                  const items = document.querySelectorAll('.css-8krjsn');
-                  if (items[index]) {
-                    const detailsDiv = items[index].nextElementSibling;
-                    if (detailsDiv) {
-                      const statusEl = detailsDiv.querySelector(selector);
-                      return statusEl ? statusEl.textContent?.trim() : null;
-                    }
-                  }
-                  return null;
-                },
-                { selector, index: itemIndex }
-              );
-              
-              if (statusElement) {
-                return statusElement;
-              }
-            }
-            throw new Error('Status not found with any selector');
-          });
-          
-          // Get due date with retry logic
-          const dueDate = await retryOperation(async () => {
-            const dueDateElement = await page.evaluate(
+          return await getTextContent(titleElement);
+        });
+        
+        // Get the current item's position
+        const itemIndex = await page.evaluate((el: Element) => {
+          const allItems = Array.from(document.querySelectorAll('.css-8krjsn'));
+          return allItems.indexOf(el);
+        }, item);
+        
+        // Wait for the details div to be visible with retry
+        await retryOperation(
+          async () => {
+            await page.waitForFunction(
               (index: number) => {
+                const items = document.querySelectorAll('.css-8krjsn');
+                if (items[index]) {
+                  const detailsDiv = items[index].nextElementSibling as HTMLElement;
+                  return detailsDiv && detailsDiv.offsetParent !== null;
+                }
+                return false;
+              },
+              itemIndex,
+              { timeout: 5000 }
+            );
+          },
+          3,
+          1000
+        );
+        
+        // Get status with retry logic
+        const status = await retryOperation(async () => {
+          const statusSelectors = [
+            '.css-1jcdzpd p.chakra-text',
+            '.css-o5vkw1 p.chakra-text',
+            '.css-181ukw4 p.chakra-text',
+            'p.chakra-text' // Fallback selector
+          ];
+          
+          for (const selector of statusSelectors) {
+            const statusElement = await page.evaluate(
+              (data: any) => {
+                const { selector, index } = data;
                 const items = document.querySelectorAll('.css-8krjsn');
                 if (items[index]) {
                   const detailsDiv = items[index].nextElementSibling;
                   if (detailsDiv) {
-                    const dueDateEl = detailsDiv.querySelector('p.chakra-text.css-jjn383');
-                    return dueDateEl ? dueDateEl.textContent?.trim() : null;
+                    const statusEl = detailsDiv.querySelector(selector);
+                    return statusEl ? statusEl.textContent?.trim() : null;
                   }
                 }
                 return null;
               },
-              itemIndex
+              { selector, index: itemIndex }
             );
             
-            if (!dueDateElement) {
-              throw new Error('Due date element not found');
+            if (statusElement) {
+              return statusElement;
             }
-            return dueDateElement;
-          });
+          }
+          throw new Error('Status not found with any selector');
+        });
+        
+        // Get due date with retry logic
+        const dueDate = await retryOperation(async () => {
+          const dueDateElement = await page.evaluate(
+            (index: number) => {
+              const items = document.querySelectorAll('.css-8krjsn');
+              if (items[index]) {
+                const detailsDiv = items[index].nextElementSibling;
+                if (detailsDiv) {
+                  const dueDateEl = detailsDiv.querySelector('p.chakra-text.css-jjn383');
+                  return dueDateEl ? dueDateEl.textContent?.trim() : null;
+                }
+              }
+              return null;
+            },
+            itemIndex
+          );
           
-          processedItems.push({
-            title,
-            status: status || 'Unknown',
-            dueDate: dueDate || 'No due date'
-          });
-          
-          console.log(`Successfully processed item ${i + 1}/${items.length}:`, {
-            title,
-            status,
-            dueDate
-          });
-        } catch (error) {
-          console.error(`Error processing item ${i}:`, error);
-          // Continue with next item instead of failing completely
-        }
+          if (!dueDateElement) {
+            throw new Error('Due date element not found');
+          }
+          return dueDateElement;
+        });
+        
+        processedItems.push({
+          title,
+          status: status || 'Unknown',
+          dueDate: dueDate || 'No due date'
+        });
+        
+        console.log(`Successfully processed item ${i + 1}/${items.length}:`, {
+          title,
+          status,
+          dueDate
+        });
+      } catch (error) {
+        console.error(`Error processing item ${i}:`, error);
+        // Continue with next item instead of failing completely
       }
-      
-      console.log(`Processing ${processedItems.length} items...`);
-      
-      // Process and update checklist items
-      const result = await processAndUpdateChecklist(processedItems);
-      console.log('Database update completed');
-      
-      return {
-        items: processedItems,
-        updateResult: result,
-        executionTime: Date.now() - startTime
-      };
-    } else {
-      throw new Error('Could not find "View all" link after trying multiple selectors');
     }
+    
+    console.log(`Processing ${processedItems.length} items...`);
+    
+    // Process and update checklist items
+    const result = await processAndUpdateChecklist(processedItems);
+    console.log('Database update completed');
+    
+    return {
+      items: processedItems,
+      updateResult: result,
+      executionTime: Date.now() - startTime
+    };
   } catch (error) {
     console.error('Scraper error:', error instanceof Error ? error.message : 'Unknown error');
     
