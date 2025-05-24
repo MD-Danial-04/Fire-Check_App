@@ -678,13 +678,21 @@ async function runScraper() {
       timeout: RESOURCE_CONFIG.operation.pageLoadTimeout
     });
     // Race between page load and timeout
-    await Promise.race([
+    const response = await Promise.race([
       pageLoadPromise,
       new Promise((_, reject) => 
         setTimeout(() => reject(new BrowserError('Page load timeout')), 
         RESOURCE_CONFIG.operation.pageLoadTimeout)
       )
     ]);
+    if (!response) {
+      console.error('No response from page.goto');
+      throw new Error('No response from page.goto');
+    }
+    if (!response.ok()) {
+      console.error('Non-OK response from page.goto:', response.status(), response.statusText());
+      throw new Error(`Page failed to load: ${response.status()} ${response.statusText()}`);
+    }
     // Get page title
     const pageTitle = await page.title();
     // Check if we're on a login page
