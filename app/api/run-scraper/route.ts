@@ -525,117 +525,139 @@ async function runScraper() {
     if (viewAllElement) {
       console.log('Clicking "View all" element and waiting for content to load...');
       await viewAllElement.click();
-      await page.waitForTimeout(1000);
       
+      // Wait longer for content to load
+      await page.waitForTimeout(5000);
+      
+      // Wait for spinner to disappear
+      await page.waitForSelector('.chakra-spinner', { state: 'detached', timeout: 15000 }).catch(() => {
+        console.log('Spinner did not appear or already gone.');
+      });
+
+      // Wait for all items to be present and visible
+      await page.waitForFunction(() => {
+        const items = document.querySelectorAll('.css-8krjsn');
+        return items.length > 0 && Array.from(items).every(item => {
+          const element = item as HTMLElement;
+          return element.offsetParent !== null;
+        });
+      }, { timeout: 15000 });
+
+      // Log the full page HTML for debugging
+      const pageHtml = await page.content();
+      console.log('Full page HTML:', pageHtml);
+
       console.log('Reading items...');
-      const items = await page.$$('.css-8krjsn');
-      console.log(`Found ${items.length} items with class .css-8krjsn`);
-      
+      const itemHandles = await page.$$('.css-8krjsn');
+      console.log(`Found ${itemHandles.length} items with class .css-8krjsn`);
+
       const processedItems: ScrapedItem[] = [];
-      
-      for (let i = 0; i < items.length; i++) {
+
+      for (let i = 0; i < itemHandles.length; i++) {
         try {
-          const item = items[i];
-          
-          // Wait for the item to be visible
-          await item.waitForElementState('visible', { timeout: 5000 });
-          
-          // Get the title with retry logic
+          const itemHandle = itemHandles[i];
+          await itemHandle.waitForElementState('visible', { timeout: 5000 });
+
+          // Get the title
           const title = await retryOperation(async () => {
-            const titleElement = await item.$('p.chakra-text.css-qlwhay');
-            if (!titleElement) {
-              throw new Error('Title element not found');
-            }
-            return await getTextContent(titleElement);
+            const titleHandle = await itemHandle.$('p.chakra-text.css-qlwhay');
+            if (!titleHandle) throw new Error('Title element not found');
+            return await getTextContent(titleHandle);
           });
-          
-          // Get the current item's position
-          const itemIndex = await page.evaluate((el: any) => {
-            const allItems = Array.from(document.querySelectorAll('.css-8krjsn'));
-            return allItems.indexOf(el);
-          }, item);
-          
-          // Wait for the details div to be visible
-          await page.waitForFunction(
-            (index: number) => {
-              const items = document.querySelectorAll('.css-8krjsn');
-              if (items[index]) {
-                const detailsDiv = items[index].nextElementSibling as HTMLElement;
-                return detailsDiv && detailsDiv.offsetParent !== null;
-              }
-              return false;
-            },
-            itemIndex,
-            { timeout: 5000 }
-          );
-          
-          // Get status with retry logic
+
+          // Get the status with multiple fallback strategies
           const status = await retryOperation(async () => {
-            const statusSelectors = [
-              '.css-1jcdzpd p.chakra-text',
-              '.css-o5vkw1 p.chakra-text',
-              '.css-181ukw4 p.chakra-text',
-              'p.chakra-text' // Fallback selector
-            ];
-            
-            for (const selector of statusSelectors) {
-              const statusElement = await page.evaluate(
-                (data: any) => {
-                  const { selector, index } = data;
-                  const items = document.querySelectorAll('.css-8krjsn');
-                  if (items[index]) {
-                    const detailsDiv = items[index].nextElementSibling;
-                    if (detailsDiv) {
-                      const statusEl = detailsDiv.querySelector(selector);
-                      return statusEl ? statusEl.textContent?.trim() : null;
-                    }
-                  }
-                  return null;
-                },
-                { selector, index: itemIndex }
-              );
-              
-              if (statusElement) {
-                return statusElement;
+            // Strategy 1: Try original specific selector
+            let statusHandle = await itemHandle.$('p.chakra-text.css-7k3xhx');
+            if (statusHandle) {
+              return await getTextContent(statusHandle);
+            }
+
+            // Strategy 2: Try any p.chakra-text with known status text
+            const allChakraText = await itemHandle.$$('p.chakra-text');
+            for (const p of allChakraText) {
+              const text = await getTextContent(p);
+              if (["Submitted", "Pending", "Overdue"].includes(text)) {
+                return text;
               }
             }
-            throw new Error('Status not found with any selector');
-          });
-          
-          // Get due date with retry logic
-          const dueDate = await retryOperation(async () => {
-            const dueDateElement = await page.evaluate(
-              (index) => {
-                const items = document.querySelectorAll('.css-8krjsn');
-                if (items[index]) {
-                  const detailsDiv = items[index].nextElementSibling;
-                  if (detailsDiv) {
-                    const dueDateEl = detailsDiv.querySelector('p.chakra-text.css-jjn383');
-                    return dueDateEl ? dueDateEl.textContent?.trim() : null;
-                  }
-                }
-                return null;
-              },
-              itemIndex
-            );
-            
-            if (!dueDateElement) {
-              throw new Error('Due date element not found');
+
+            // Strategy 3: Try any p element with known status text
+            const allP = await itemHandle.$$('p');
+            for (const p of allP) {
+              const text = await getTextContent(p);
+              if (["Submitted", "Pending", "Overdue"].includes(text)) {
+                return text;
+              }
             }
-            return dueDateElement;
+
+            // Strategy 4: Use evaluate to traverse DOM for status as sibling or in parent
+            const statusText = await itemHandle.evaluate((el) => {
+              // Try nextElementSibling
+              let sib = el.nextElementSibling;
+              while (sib) {
+                if (sib.matches && sib.matches('p.chakra-text.css-7k3xhx')) {
+                  return sib.textContent?.trim() || null;
+                }
+                sib = sib.nextElementSibling;
+              }
+              // Try parent children
+              if (el.parentElement) {
+                const found = el.parentElement.querySelector('p.chakra-text.css-7k3xhx');
+                if (found) return found.textContent?.trim() || null;
+              }
+              return null;
+            });
+            if (statusText) return statusText;
+
+            // Strategy 5: Log all text content for debugging
+            const allText = await Promise.all(
+              (await itemHandle.$$('p')).map(p => getTextContent(p))
+            );
+            console.log(`Could not find status for card ${i + 1}. All text content:`, allText);
+            
+            // Log the HTML of the card and its parent for debugging
+            const cardHtml = await itemHandle.evaluate(el => el.outerHTML);
+            const parentHtml = await itemHandle.evaluate(el => el.parentElement?.outerHTML);
+            console.log(`Card ${i + 1} HTML:`, cardHtml);
+            console.log(`Card ${i + 1} parent HTML:`, parentHtml);
+
+            throw new Error('Status element not found after trying all strategies');
           });
-          
-          processedItems.push({
-            title,
-            status: status || 'Unknown',
-            dueDate: dueDate || 'No due date'
+
+          // Get the due date
+          const dueDate = await retryOperation(async () => {
+            // Try original selector
+            const dueDateHandle = await itemHandle.$('p.chakra-text.css-jjn383');
+            if (dueDateHandle) return await getTextContent(dueDateHandle);
+
+            // Try DOM traversal for due date
+            const dueDateText = await itemHandle.evaluate((el) => {
+              // Next siblings
+              let sib = el.nextElementSibling;
+              while (sib) {
+                if (sib.matches && sib.matches('p.chakra-text.css-jjn383')) {
+                  return sib.textContent?.trim() || null;
+                }
+                sib = sib.nextElementSibling;
+              }
+              // Parent children
+              if (el.parentElement) {
+                const found = el.parentElement.querySelector('p.chakra-text.css-jjn383');
+                if (found) return found.textContent?.trim() || null;
+              }
+              return null;
+            });
+            if (dueDateText) return dueDateText;
+
+            // Debug log
+            throw new Error('Due date element not found after trying all strategies');
           });
-          
-          console.log(`Successfully processed item ${i + 1}/${items.length}:`, {
-            title,
-            status,
-            dueDate
-          });
+
+          processedItems.push({ title, status, dueDate });
+          console.log(`Successfully processed item ${i + 1}/${itemHandles.length}:`, { title, status, dueDate });
+
+          await itemHandle.dispose();
         } catch (error) {
           console.error(`Error processing item ${i}:`, error);
           // Continue with next item instead of failing completely
