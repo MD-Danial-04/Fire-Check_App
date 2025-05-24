@@ -151,8 +151,7 @@ async function updateVehicleStatus(
         item_id: vehicleInfo.id,
         name: vehicleInfo.name,
         checked: true,
-        assigned_to: checker || null,
-        last_updated: new Date().toISOString()
+        assigned_to: checker || null
       }, {
         onConflict: 'section,item_id'
       });
@@ -170,13 +169,17 @@ export async function POST(request: NextRequest) {
   try {
     // Log the raw request body
     const raw = await request.text();
-    console.log('RAW BODY:', raw);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('RAW BODY:', raw);
+    }
 
     // Parse JSON
     let update: TelegramUpdate;
     try {
       update = JSON.parse(raw);
-      console.log('PARSED JSON:', update);
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('PARSED JSON:', update);
+      }
     } catch (jsonErr) {
       const errMsg = jsonErr instanceof Error ? jsonErr.message : String(jsonErr);
       console.error('JSON PARSE ERROR:', errMsg);
@@ -194,14 +197,20 @@ export async function POST(request: NextRequest) {
     }
     const messageText = update.message.text;
     if (!messageText) {
-      console.warn('No text in message, ignoring update:', update.message);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('No text in message, ignoring update:', update.message);
+      }
       return NextResponse.json({ status: 'ignored: no text' }, { status: 200 });
     }
     // Parse the message
     const parsedInfo = await parseMessage(messageText);
-    console.log('PARSED MESSAGE:', parsedInfo);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('PARSED MESSAGE:', parsedInfo);
+    }
     if (!parsedInfo) {
-      console.warn('Invalid message format:', messageText);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('Invalid message format:', messageText);
+      }
       // Always return 200 OK so Telegram will deliver the next update
       return NextResponse.json({ status: 'ignored' }, { status: 200 });
     }
@@ -217,7 +226,9 @@ export async function POST(request: NextRequest) {
       // Always return 200 OK so Telegram will deliver the next update
       return NextResponse.json({ status: 'db update failed but ignored' }, { status: 200 });
     }
-    console.log('Database update success for:', parsedInfo);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('Database update success for:', parsedInfo);
+    }
     return NextResponse.json({ status: 'success' });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : String(error);
