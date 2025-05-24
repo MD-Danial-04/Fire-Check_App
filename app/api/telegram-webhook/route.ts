@@ -185,6 +185,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ status: 'unauthorized' }, { status: 401 });
     }
     const messageText = update.message.text;
+    if (!messageText) {
+      console.warn('No text in message, ignoring update:', update.message);
+      return NextResponse.json({ status: 'ignored: no text' }, { status: 200 });
+    }
     // Parse the message
     const parsedInfo = await parseMessage(messageText);
     console.log('PARSED MESSAGE:', parsedInfo);
