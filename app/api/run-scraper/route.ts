@@ -645,19 +645,17 @@ class ResourceManager {
 async function runScraper() {
   const resourceManager = new ResourceManager();
   const startTime = Date.now();
-  
+  let result = null;
+  let error = null;
   try {
     // Validate environment variables
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       throw new ValidationError('Missing required environment variables for Supabase connection');
     }
-    
     // Initialize browser
     const browser = await resourceManager.initializeBrowser();
-    
     // Load session data
     const sessionData = await loadSessionFromDatabase();
-    
     // Create context and set cookies
     const context = await resourceManager.createContext();
     for (const cookie of sessionData.cookies) {
@@ -672,16 +670,13 @@ async function runScraper() {
         sameSite: cookie.sameSite || 'Lax'
       }]);
     }
-    
     // Create page and navigate
     const page = await resourceManager.createPage(context);
-    
     // Set up timeout for page load
     const pageLoadPromise = page.goto('https://armoury.gov.sg/lists', {
       waitUntil: 'domcontentloaded',
       timeout: RESOURCE_CONFIG.operation.pageLoadTimeout
     });
-    
     // Race between page load and timeout
     await Promise.race([
       pageLoadPromise,
@@ -690,47 +685,53 @@ async function runScraper() {
         RESOURCE_CONFIG.operation.pageLoadTimeout)
       )
     ]);
-    
     // Get page title
     const pageTitle = await page.title();
-    
     // Check if we're on a login page
     const isLoginPage = await page.content().then((html: string) => 
       html.toLowerCase().includes('login') || 
       html.toLowerCase().includes('sign in')
     );
-    
     if (isLoginPage) {
       throw new Error('Session expired or invalid - detected login page');
     }
-    
     // Find View all element using a robust selector
     console.log('Looking for "View all" element...');
     let viewAllElement = null;
-    for (let i = 0; i < 20; i++) { // Try for up to 10 seconds
-      const viewAllElements = await page.$$('p.chakra-text.css-10ahl1q');
-      for (const el of viewAllElements) {
-        const text = await el.textContent();
-        if (text && text.trim().toLowerCase().startsWith('view all')) {
-          viewAllElement = el;
+    for (let i = 0; i < 20; i++) {
+      try {
+        const viewAllElements = await page.$$('p.chakra-text.css-10ahl1q');
+        for (const el of viewAllElements) {
+          const text = await el.textContent();
+          if (text && text.trim().toLowerCase().startsWith('view all')) {
+            viewAllElement = el;
+            break;
+          }
+        }
+        if (viewAllElement) break;
+        await page.waitForTimeout(500);
+      } catch (err) {
+        if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string' && err.message.includes('has been closed')) {
+          console.error('Page or browser was closed during View all search loop.');
           break;
         }
+        throw err;
       }
-      if (viewAllElement) break;
-      await page.waitForTimeout(500);
     }
     if (!viewAllElement) {
-      const htmlSnippet = await page.content();
+      let htmlSnippet = '';
+      try {
+        htmlSnippet = await page.content();
+      } catch (err) {
+        htmlSnippet = 'Page closed, no HTML available';
+      }
       console.error('Could not find "View all" element after waiting. HTML snippet:', htmlSnippet.slice(0, 1000));
       throw new Error('Could not find "View all" link after waiting');
     }
-    
     console.log('Clicking "View all" element and waiting for content to load...');
     await viewAllElement.click();
-    
     // Wait for the content to be fully loaded
     await page.waitForTimeout(2000); // Initial wait for content to start loading
-    
     // Wait for the items to be present and stable
     await page.waitForFunction(
       () => {
@@ -742,13 +743,10 @@ async function runScraper() {
       },
       { timeout: 10000 }
     );
-    
     console.log('Reading items...');
     const items = await page.$$('.css-8krjsn');
     console.log(`Found ${items.length} items with class .css-8krjsn`);
-    
     const processedItems: ScrapedItem[] = [];
-    
     for (let i = 0; i < items.length; i++) {
       try {
         // Get fresh reference to items on each iteration
@@ -757,9 +755,7 @@ async function runScraper() {
           console.log(`Item ${i} no longer available, skipping...`);
           continue;
         }
-        
         const item = currentItems[i];
-        
         // Wait for the item to be visible with retry
         await retryOperation(
           async () => {
@@ -768,7 +764,6 @@ async function runScraper() {
           3,  // max retries
           1000 // delay between retries
         );
-        
         // Get the title with retry logic
         const title = await retryOperation(async () => {
           const titleElement = await item.$('p.chakra-text.css-qlwhay');
@@ -777,13 +772,11 @@ async function runScraper() {
           }
           return await getTextContent(titleElement);
         });
-        
         // Get the current item's position
         const itemIndex = await page.evaluate((el: Element) => {
           const allItems = Array.from(document.querySelectorAll('.css-8krjsn'));
           return allItems.indexOf(el);
         }, item);
-        
         // Wait for the details div to be visible with retry
         await retryOperation(
           async () => {
@@ -803,7 +796,6 @@ async function runScraper() {
           3,
           1000
         );
-        
         // Get status with retry logic
         const status = await retryOperation(async () => {
           const statusSelectors = [
@@ -812,7 +804,6 @@ async function runScraper() {
             '.css-181ukw4 p.chakra-text',
             'p.chakra-text' // Fallback selector
           ];
-          
           for (const selector of statusSelectors) {
             const statusElement = await page.evaluate(
               (data: any) => {
@@ -829,14 +820,12 @@ async function runScraper() {
               },
               { selector, index: itemIndex }
             );
-            
             if (statusElement) {
               return statusElement;
             }
           }
           throw new Error('Status not found with any selector');
         });
-        
         // Get due date with retry logic
         const dueDate = await retryOperation(async () => {
           const dueDateElement = await page.evaluate(
@@ -853,19 +842,16 @@ async function runScraper() {
             },
             itemIndex
           );
-          
           if (!dueDateElement) {
             throw new Error('Due date element not found');
           }
           return dueDateElement;
         });
-        
         processedItems.push({
           title,
           status: status || 'Unknown',
           dueDate: dueDate || 'No due date'
         });
-        
         console.log(`Successfully processed item ${i + 1}/${items.length}:`, {
           title,
           status,
@@ -876,31 +862,27 @@ async function runScraper() {
         // Continue with next item instead of failing completely
       }
     }
-    
     console.log(`Processing ${processedItems.length} items...`);
-    
     // Process and update checklist items
-    const result = await processAndUpdateChecklist(processedItems);
+    result = await processAndUpdateChecklist(processedItems);
     console.log('Database update completed');
-    
     return {
       items: processedItems,
       updateResult: result,
       executionTime: Date.now() - startTime
     };
-  } catch (error) {
-    console.error('Scraper error:', error instanceof Error ? error.message : 'Unknown error');
-    
+  } catch (err) {
+    error = err;
+    console.error('Scraper error:', err instanceof Error ? err.message : 'Unknown error');
     if (process.env.VERCEL === '1') {
-      console.error('Detailed error information:', error);
-      if (error instanceof Error && error.stack) {
-        console.error('Stack trace:', error.stack);
+      console.error('Detailed error information:', err);
+      if (err instanceof Error && err.stack) {
+        console.error('Stack trace:', err.stack);
       }
     }
-    
-    throw error;
+    throw err;
   } finally {
-    // Ensure resources are cleaned up
+    // Ensure resources are cleaned up only after all scraping and async work is complete
     await resourceManager.cleanup();
   }
 }
