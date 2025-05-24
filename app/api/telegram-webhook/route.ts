@@ -134,6 +134,9 @@ async function updateVehicleStatus(
       const match = mapping.name.match(/^(.*)\(([^)]+)\)$/);
       if (!match) return false;
       const dbPlate = match[2].trim().toUpperCase();
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('Comparing plate numbers:', { dbPlate, plateNumber });
+      }
       return dbPlate === plateNumber;
     });
     if (!vehicleInfo) {
@@ -153,6 +156,9 @@ async function updateVehicleStatus(
       }, {
         onConflict: 'section,item_id'
       });
+    if (error) {
+      console.error('Supabase upsert error:', error);
+    }
     return !error;
   } catch (error) {
     console.error('Error in updateVehicleStatus:', error);
@@ -181,7 +187,9 @@ export async function POST(request: NextRequest) {
     if (!update.message || 
         !['group', 'supergroup'].includes(update.message.chat.type) || 
         update.message.chat.id.toString() !== ALLOWED_GROUP_ID) {
-      console.warn('Unauthorized or invalid chat:', update.message?.chat);
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('Unauthorized or invalid chat:', update.message?.chat);
+      }
       return NextResponse.json({ status: 'unauthorized' }, { status: 401 });
     }
     const messageText = update.message.text;
