@@ -162,16 +162,34 @@ async function updateVehicleStatus(
 
 export async function POST(request: NextRequest) {
   try {
-    const update: TelegramUpdate = await request.json();
+    // Log the raw request body
+    const raw = await request.text();
+    console.log('RAW BODY:', raw);
+
+    // Parse JSON
+    let update: TelegramUpdate;
+    try {
+      update = JSON.parse(raw);
+      console.log('PARSED JSON:', update);
+    } catch (jsonErr) {
+      const errMsg = jsonErr instanceof Error ? jsonErr.message : String(jsonErr);
+      console.error('JSON PARSE ERROR:', errMsg);
+      return NextResponse.json({ status: 'invalid json', error: errMsg }, { status: 400 });
+    }
+
+    // Validate the message
     if (!update.message || 
         update.message.chat.type !== 'group' || 
         update.message.chat.id.toString() !== ALLOWED_GROUP_ID) {
+      console.warn('Unauthorized or invalid chat:', update.message?.chat);
       return NextResponse.json({ status: 'unauthorized' }, { status: 401 });
     }
     const messageText = update.message.text;
     // Parse the message
     const parsedInfo = await parseMessage(messageText);
+    console.log('PARSED MESSAGE:', parsedInfo);
     if (!parsedInfo) {
+      console.warn('Invalid message format:', messageText);
       return NextResponse.json({ status: 'invalid message format' }, { status: 400 });
     }
     // Update the database
@@ -182,12 +200,15 @@ export async function POST(request: NextRequest) {
       parsedInfo.checker || null
     );
     if (!success) {
+      console.error('Database update failed for:', parsedInfo);
       return NextResponse.json({ status: 'database update failed' }, { status: 500 });
     }
+    console.log('Database update success for:', parsedInfo);
     return NextResponse.json({ status: 'success' });
   } catch (error) {
-    console.error('Error processing Telegram webhook:', error);
-    return NextResponse.json({ status: 'error' }, { status: 500 });
+    const errMsg = error instanceof Error ? error.message : String(error);
+    console.error('Error processing Telegram webhook:', errMsg);
+    return NextResponse.json({ status: 'error', error: errMsg }, { status: 500 });
   }
 }
 
