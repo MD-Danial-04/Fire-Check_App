@@ -136,8 +136,8 @@ async function updateVehicleStatus(
       const dbType = match[1].trim();
       const dbPlate = match[2].trim().toUpperCase();
       return (
-        dbType.toUpperCase() === vehicleType.toUpperCase() &&
-        dbPlate === plateNumber
+        dbPlate === plateNumber &&
+        (dbType.toUpperCase().includes(vehicleType.toUpperCase()) || vehicleType.toUpperCase().includes(dbType.toUpperCase()))
       );
     });
     if (!vehicleInfo) return false;
