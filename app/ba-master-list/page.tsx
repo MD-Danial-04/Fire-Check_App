@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, MapPin, Plus, Check, X, List, Grid, Filter, AlertCircle, ExternalLink } from 'lucide-react'
+import { Search, MapPin, Plus, Check, X, List, Grid, Filter, AlertCircle, ExternalLink, FileCheck } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getBAMasterList } from '@/lib/queries'
@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { format } from 'date-fns'
+import { BAValidationPanel } from '@/app/components/BAValidationPanel'
 
 const locations = [
   'All Locations',
@@ -215,6 +216,7 @@ export default function BAMasterList() {
   const [selectedBaId, setSelectedBaId] = useState<number | null>(null)
   const [showMovements, setShowMovements] = useState(false)
   const [swapType, setSwapType] = useState<'BA' | 'CYLINDER'>('BA')
+  const [showValidation, setShowValidation] = useState(false)
   
   useEffect(() => {
     fetchBAMasterList()
@@ -1355,10 +1357,18 @@ export default function BAMasterList() {
               selectedBaId={selectedBaId}
               showAllMovements={true}
               swapType={swapType}
+              onValidate={() => setShowValidation(true)}
             />
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Add this at the bottom of the component */}
+      <BAValidationPanel
+        baList={backplates}
+        isOpen={showValidation}
+        onClose={() => setShowValidation(false)}
+      />
     </div>
   </div>
 );

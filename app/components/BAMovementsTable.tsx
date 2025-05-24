@@ -40,6 +40,7 @@ interface Props {
   selectedBaId?: number | null;
   showAllMovements?: boolean;
   swapType?: 'BA' | 'CYLINDER';
+  onValidate?: () => void;
 }
 
 export default function BAMovementsTable({
@@ -47,6 +48,7 @@ export default function BAMovementsTable({
   selectedBaId,
   showAllMovements = false,
   swapType: parentSwapType,
+  onValidate,
 }: Props) {
   const [movements, setMovements] = useState<BaMovements[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -220,13 +222,19 @@ export default function BAMovementsTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {/* Validate BA List button */}
+        {onValidate && (
+          <Button variant="default" onClick={onValidate} className="min-w-[110px] h-9 px-2 text-xs">
+            Validate BA List
+          </Button>
+        )}
         <Dialog open={isDialogOpen} onOpenChange={(open) => {
           setIsDialogOpen(open);
           if (!open) resetNewMovementForm();
         }}>
           <DialogTrigger asChild>
-            <Button className="min-w-[140px]">
+            <Button className="min-w-[110px] h-9 px-2 text-xs">
               <Plus className="h-4 w-4 mr-2" />
               New Movement
             </Button>
