@@ -706,19 +706,23 @@ async function runScraper() {
     
     // Find View all element using a robust selector
     console.log('Looking for "View all" element...');
-    const viewAllElements = await page.$$('p.chakra-text.css-10ahl1q');
     let viewAllElement = null;
-    for (const el of viewAllElements) {
-      const text = await el.textContent();
-      if (text && text.trim().startsWith('View all')) {
-        viewAllElement = el;
-        break;
+    for (let i = 0; i < 20; i++) { // Try for up to 10 seconds
+      const viewAllElements = await page.$$('p.chakra-text.css-10ahl1q');
+      for (const el of viewAllElements) {
+        const text = await el.textContent();
+        if (text && text.trim().toLowerCase().startsWith('view all')) {
+          viewAllElement = el;
+          break;
+        }
       }
+      if (viewAllElement) break;
+      await page.waitForTimeout(500);
     }
-
     if (!viewAllElement) {
-      console.error('Could not find "View all" element.');
-      throw new Error('Could not find "View all" link after trying multiple selectors');
+      const htmlSnippet = await page.content();
+      console.error('Could not find "View all" element after waiting. HTML snippet:', htmlSnippet.slice(0, 1000));
+      throw new Error('Could not find "View all" link after waiting');
     }
     
     console.log('Clicking "View all" element and waiting for content to load...');
