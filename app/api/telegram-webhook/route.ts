@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
 
     // Validate the message
     if (!update.message || 
-        update.message.chat.type !== 'group' || 
+        !['group', 'supergroup'].includes(update.message.chat.type) || 
         update.message.chat.id.toString() !== ALLOWED_GROUP_ID) {
       console.warn('Unauthorized or invalid chat:', update.message?.chat);
       return NextResponse.json({ status: 'unauthorized' }, { status: 401 });
@@ -190,7 +190,8 @@ export async function POST(request: NextRequest) {
     console.log('PARSED MESSAGE:', parsedInfo);
     if (!parsedInfo) {
       console.warn('Invalid message format:', messageText);
-      return NextResponse.json({ status: 'invalid message format' }, { status: 400 });
+      // Always return 200 OK so Telegram will deliver the next update
+      return NextResponse.json({ status: 'ignored' }, { status: 200 });
     }
     // Update the database
     const success = await updateVehicleStatus(
