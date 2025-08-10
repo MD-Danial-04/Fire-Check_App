@@ -378,7 +378,8 @@ export default function EquipmentChecklistPage() {
     "Above 1/2",
     "Exactly 1/2",
     "Below 1/2",
-    "Pending"
+    "Pending",
+    "Servicing"
   ];
 
   // Create a combined list for BWC section
