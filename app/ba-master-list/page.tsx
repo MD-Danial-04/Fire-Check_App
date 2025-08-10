@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Search, MapPin, Plus, Check, X, List, Grid, Filter, AlertCircle, ExternalLink, FileCheck } from 'lucide-react'
+import { Search, MapPin, Plus, Check, X, List, Grid, Filter, AlertCircle, ExternalLink, FileCheck, Pencil } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getBAMasterList } from '@/lib/queries'
@@ -31,9 +31,15 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog"
 import { format } from 'date-fns'
 import { BAValidationPanel } from '@/app/components/BAValidationPanel'
+import { useToast } from '@/components/ui/use-toast'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
+import { updateBAMasterList } from '@/lib/queries'
 
 const locations = [
   'All Locations',
@@ -217,6 +223,88 @@ export default function BAMasterList() {
   const [showMovements, setShowMovements] = useState(false)
   const [swapType, setSwapType] = useState<'BA' | 'CYLINDER'>('BA')
   const [showValidation, setShowValidation] = useState(false)
+  const { toast } = useToast()
+
+  // Edit flow - all fields
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [editBa, setEditBa] = useState<BaMasterList | null>(null)
+  const [baForm, setBaForm] = useState<{
+    serial_number: string;
+    cylinder_serial: string;
+    date_of_birth: string;
+    hydro_date: string;
+    service_due_date: string;
+    location: string;
+    is_spare: boolean;
+    telemetry_id: string;
+    remarks: string;
+  }>({
+    serial_number: '',
+    cylinder_serial: '',
+    date_of_birth: '',
+    hydro_date: '',
+    service_due_date: '',
+    location: '',
+    is_spare: false,
+    telemetry_id: '',
+    remarks: '',
+  })
+  const [isSavingBa, setIsSavingBa] = useState(false)
+
+  const handleOpenEdit = (ba: BaMasterList) => {
+    setEditBa(ba)
+    setBaForm({
+      serial_number: ba.serial_number || '',
+      cylinder_serial: ba.cylinder_serial || '',
+      date_of_birth: ba.date_of_birth ? ba.date_of_birth.slice(0, 10) : '',
+      hydro_date: ba.hydro_date ? ba.hydro_date.slice(0, 10) : '',
+      service_due_date: ba.service_due_date || '',
+      location: ba.location || '',
+      is_spare: !!ba.is_spare,
+      telemetry_id: ba.telemetry_id || '',
+      remarks: ba.remarks || '',
+    })
+    setIsEditOpen(true)
+  }
+
+  const handleFormChange = (field: keyof typeof baForm, value: string | boolean) => {
+    setBaForm(prev => ({ ...prev, [field]: value as any }))
+  }
+
+  const handleSaveBa = async () => {
+    if (!editBa) return
+    setIsSavingBa(true)
+    try {
+      // Prepare updates with proper date formatting
+      const updates: Partial<BaMasterList> = {
+        serial_number: baForm.serial_number,
+        cylinder_serial: baForm.cylinder_serial,
+        date_of_birth: baForm.date_of_birth ? new Date(baForm.date_of_birth).toISOString() : null,
+        hydro_date: baForm.hydro_date ? new Date(baForm.hydro_date).toISOString() : null,
+        service_due_date: baForm.service_due_date || null,
+        location: baForm.location,
+        is_spare: baForm.is_spare,
+        telemetry_id: baForm.telemetry_id,
+        remarks: baForm.remarks,
+      }
+
+      // Persist to Supabase
+      await updateBAMasterList(editBa.id, updates)
+
+      // Optimistic in-memory update
+      setBackplates(prev => prev.map(b => (
+        b.id === editBa.id ? { ...b, ...updates } : b
+      )))
+
+      toast({ title: 'Saved', description: 'BA particulars updated.' })
+      setIsEditOpen(false)
+      setEditBa(null)
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'Failed to save', variant: 'destructive' })
+    } finally {
+      setIsSavingBa(false)
+    }
+  }
   
   useEffect(() => {
     fetchBAMasterList()
@@ -357,11 +445,20 @@ export default function BAMasterList() {
             <div 
               key={backplate.id}
               className={cn(
-                "p-4 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800",
+                "relative p-4 border rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800",
                 selectedBaId === backplate.id && "bg-gray-100 dark:bg-gray-800"
               )}
               onClick={() => handleBaSelect(backplate.id)}
             >
+              {/* Edit icon */}
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleOpenEdit(backplate) }}
+                className="absolute top-2 right-2 inline-flex items-center justify-center w-6 h-6 rounded-md border bg-white/90 dark:bg-neutral-900/70 text-neutral-700 dark:text-neutral-200 shadow-sm hover:bg-white dark:hover:bg-neutral-800"
+                aria-label="Edit BA"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
@@ -800,17 +897,31 @@ export default function BAMasterList() {
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                     {role}
                                   </span>
-                                  {(() => {
-                                    const hydroDate = (groupedBackplates['LF811'] || []).find(b => getRole(b.location) === role)?.hydro_date ?? null;
-                                    const hydroStatus = getHydroTestDueStatus(hydroDate);
-                                    if (!hydroStatus) return null;
-                                    return (
-                                      <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
-                                        <AlertCircle className="h-3 w-3" />
-                                        <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
-                                      </div>
-                                    );
-                                  })()}
+                                  <div className="flex items-center gap-2">
+                                    {(() => {
+                                      const hydroDate = (groupedBackplates['LF811'] || []).find(b => getRole(b.location) === role)?.hydro_date ?? null;
+                                      const hydroStatus = getHydroTestDueStatus(hydroDate);
+                                      if (!hydroStatus) return null;
+                                      return (
+                                        <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                          <AlertCircle className="h-3 w-3" />
+                                          <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                        </div>
+                                      );
+                                    })()}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const backplate = (groupedBackplates['LF811'] || []).find(b => getRole(b.location) === role);
+                                        if (backplate) handleOpenEdit(backplate);
+                                      }}
+                                      className="inline-flex items-center justify-center w-6 h-6 rounded-md border bg-white/90 dark:bg-neutral-900/70 text-neutral-700 dark:text-neutral-200 shadow-sm hover:bg-white dark:hover:bg-neutral-800"
+                                      aria-label="Edit BA"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -842,17 +953,31 @@ export default function BAMasterList() {
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                     {role}
                                   </span>
-                                  {(() => {
-                                    const hydroDate = (groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.hydro_date ?? null;
-                                    const hydroStatus = getHydroTestDueStatus(hydroDate);
-                                    if (!hydroStatus) return null;
-                                    return (
-                                      <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
-                                        <AlertCircle className="h-3 w-3" />
-                                        <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
-                                      </div>
-                                    );
-                                  })()}
+                                  <div className="flex items-center gap-2">
+                                    {(() => {
+                                      const hydroDate = (groupedBackplates['LF812'] || []).find(b => b.location?.includes(role))?.hydro_date ?? null;
+                                      const hydroStatus = getHydroTestDueStatus(hydroDate);
+                                      if (!hydroStatus) return null;
+                                      return (
+                                        <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                          <AlertCircle className="h-3 w-3" />
+                                          <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                        </div>
+                                      );
+                                    })()}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const backplate = (groupedBackplates['LF812'] || []).find(b => b.location?.includes(role));
+                                        if (backplate) handleOpenEdit(backplate);
+                                      }}
+                                      className="inline-flex items-center justify-center w-6 h-6 rounded-md border bg-white/90 dark:bg-neutral-900/70 text-neutral-700 dark:text-neutral-200 shadow-sm hover:bg-white dark:hover:bg-neutral-800"
+                                      aria-label="Edit BA"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -887,16 +1012,29 @@ export default function BAMasterList() {
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                     Set {index + 1}
                                   </span>
-                                  {(() => {
-                                    const hydroStatus = getHydroTestDueStatus(backplate.hydro_date);
-                                    if (!hydroStatus) return null;
-                                    return (
-                                      <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
-                                        <AlertCircle className="h-3 w-3" />
-                                        <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
-                                      </div>
-                                    );
-                                  })()}
+                                  <div className="flex items-center gap-2">
+                                    {(() => {
+                                      const hydroStatus = getHydroTestDueStatus(backplate.hydro_date);
+                                      if (!hydroStatus) return null;
+                                      return (
+                                        <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                          <AlertCircle className="h-3 w-3" />
+                                          <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                        </div>
+                                      );
+                                    })()}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenEdit(backplate);
+                                      }}
+                                      className="inline-flex items-center justify-center w-6 h-6 rounded-md border bg-white/90 dark:bg-neutral-900/70 text-neutral-700 dark:text-neutral-200 shadow-sm hover:bg-white dark:hover:bg-neutral-800"
+                                      aria-label="Edit BA"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between text-[10px]">
@@ -931,17 +1069,31 @@ export default function BAMasterList() {
                                     <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                       {setNumber}
                                     </span>
-                                    {(() => {
-                                      const hydroDate = (groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.hydro_date ?? null;
-                                      const hydroStatus = getHydroTestDueStatus(hydroDate);
-                                      if (!hydroStatus) return null;
-                                      return (
-                                        <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
-                                          <AlertCircle className="h-3 w-3" />
-                                          <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
-                                        </div>
-                                      );
-                                    })()}
+                                    <div className="flex items-center gap-2">
+                                      {(() => {
+                                        const hydroDate = (groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber)?.hydro_date ?? null;
+                                        const hydroStatus = getHydroTestDueStatus(hydroDate);
+                                        if (!hydroStatus) return null;
+                                        return (
+                                          <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                            <AlertCircle className="h-3 w-3" />
+                                            <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                          </div>
+                                        );
+                                      })()}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const backplate = (groupedBackplates['MRV811'] || []).find(b => getRole(b.location) === setNumber);
+                                          if (backplate) handleOpenEdit(backplate);
+                                        }}
+                                        className="inline-flex items-center justify-center w-6 h-6 rounded-md border bg-white/90 dark:bg-neutral-900/70 text-neutral-700 dark:text-neutral-200 shadow-sm hover:bg-white dark:hover:bg-neutral-800"
+                                        aria-label="Edit BA"
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </button>
+                                    </div>
                                   </div>
                                   <div className="grid grid-cols-2 gap-y-2">
                                     <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -990,12 +1142,29 @@ export default function BAMasterList() {
                                           <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                             {roleName}
                                           </span>
-                                          {isServiceDueThisMonth(backplate.hydro_date) && (
-                                            <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
-                                              <AlertCircle className="h-3 w-3" />
-                                              <span>Hydrostatic Test Due</span>
-                                            </div>
-                                          )}
+                                          <div className="flex items-center gap-2">
+                                            {(() => {
+                                              const hydroStatus = getHydroTestDueStatus(backplate.hydro_date);
+                                              if (!hydroStatus) return null;
+                                              return (
+                                                <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                                  <AlertCircle className="h-3 w-3" />
+                                                  <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                                </div>
+                                              );
+                                            })()}
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenEdit(backplate);
+                                              }}
+                                              className="inline-flex items-center justify-center w-6 h-6 rounded-md border bg-white/90 dark:bg-neutral-900/70 text-neutral-700 dark:text-neutral-200 shadow-sm hover:bg-white dark:hover:bg-neutral-800"
+                                              aria-label="Edit BA"
+                                            >
+                                              <Pencil className="h-3 w-3" />
+                                            </button>
+                                          </div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-y-2">
                                           <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -1036,12 +1205,29 @@ export default function BAMasterList() {
                                           <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
                                             {roleName}
                                           </span>
-                                          {isServiceDueThisMonth(backplate.hydro_date) && (
-                                            <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
-                                              <AlertCircle className="h-3 w-3" />
-                                              <span>Hydrostatic Test Due</span>
-                                            </div>
-                                          )}
+                                          <div className="flex items-center gap-2">
+                                            {(() => {
+                                              const hydroStatus = getHydroTestDueStatus(backplate.hydro_date);
+                                              if (!hydroStatus) return null;
+                                              return (
+                                                <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                                  <AlertCircle className="h-3 w-3" />
+                                                  <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                                </div>
+                                              );
+                                            })()}
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleOpenEdit(backplate);
+                                              }}
+                                              className="inline-flex items-center justify-center w-6 h-6 rounded-md border bg-white/90 dark:bg-neutral-900/70 text-neutral-700 dark:text-neutral-200 shadow-sm hover:bg-white dark:hover:bg-neutral-800"
+                                              aria-label="Edit BA"
+                                            >
+                                              <Pencil className="h-3 w-3" />
+                                            </button>
+                                          </div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-y-2">
                                           <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -1085,12 +1271,29 @@ export default function BAMasterList() {
                                       'SPARE'
                                     }
                                   </span>
-                                  {isServiceDueThisMonth(backplate.hydro_date) && (
-                                    <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
-                                      <AlertCircle className="h-3 w-3" />
-                                      <span>Hydrostatic Test Due</span>
-                                    </div>
-                                  )}
+                                  <div className="flex items-center gap-2">
+                                    {(() => {
+                                      const hydroStatus = getHydroTestDueStatus(backplate.hydro_date);
+                                      if (!hydroStatus) return null;
+                                      return (
+                                        <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                          <AlertCircle className="h-3 w-3" />
+                                          <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                        </div>
+                                      );
+                                    })()}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleOpenEdit(backplate);
+                                      }}
+                                      className="inline-flex items-center justify-center w-6 h-6 rounded-md border bg-white/90 dark:bg-neutral-900/70 text-neutral-700 dark:text-neutral-200 shadow-sm hover:bg-white dark:hover:bg-neutral-800"
+                                      aria-label="Edit BA"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                  </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-y-2">
                                   <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
@@ -1362,6 +1565,149 @@ export default function BAMasterList() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Edit Dialog - All Fields */}
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit BA Details</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="serial_number" className="text-xs">Serial Number</Label>
+                <Input
+                  id="serial_number"
+                  value={baForm.serial_number}
+                  onChange={(e) => handleFormChange('serial_number', e.target.value)}
+                  className="mt-1 h-8 text-sm"
+                  placeholder="e.g., BSTJ-2990"
+                />
+              </div>
+              <div>
+                <Label htmlFor="cylinder_serial" className="text-xs">Cylinder Serial</Label>
+                <Input
+                  id="cylinder_serial"
+                  value={baForm.cylinder_serial}
+                  onChange={(e) => handleFormChange('cylinder_serial', e.target.value)}
+                  className="mt-1 h-8 text-sm"
+                  placeholder="e.g., BR3K-5540"
+                />
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="date_of_birth" className="text-xs">Date of Birth</Label>
+                <Input
+                  id="date_of_birth"
+                  type="date"
+                  value={baForm.date_of_birth}
+                  onChange={(e) => handleFormChange('date_of_birth', e.target.value)}
+                  onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker && (e.currentTarget as any).showPicker()}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { const t = e.currentTarget as HTMLInputElement; (t as any).showPicker && (t as any).showPicker(); } }}
+                  autoComplete="off"
+                  className="mt-1 h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Label htmlFor="hydro_date" className="text-xs">Hydrostatic Date</Label>
+                <Input
+                  id="hydro_date"
+                  type="date"
+                  value={baForm.hydro_date}
+                  onChange={(e) => handleFormChange('hydro_date', e.target.value)}
+                  onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker && (e.currentTarget as any).showPicker()}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { const t = e.currentTarget as HTMLInputElement; (t as any).showPicker && (t as any).showPicker(); } }}
+                  autoComplete="off"
+                  className="mt-1 h-8 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="service_due_date" className="text-xs">Service Due Date</Label>
+                <Input
+                  id="service_due_date"
+                  type="date"
+                  value={baForm.service_due_date}
+                  onChange={(e) => handleFormChange('service_due_date', e.target.value)}
+                  onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker && (e.currentTarget as any).showPicker()}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { const t = e.currentTarget as HTMLInputElement; (t as any).showPicker && (t as any).showPicker(); } }}
+                  autoComplete="off"
+                  className="mt-1 h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Label htmlFor="telemetry_id" className="text-xs">Telemetry ID</Label>
+                <Input
+                  id="telemetry_id"
+                  value={baForm.telemetry_id}
+                  onChange={(e) => handleFormChange('telemetry_id', e.target.value)}
+                  className="mt-1 h-8 text-sm"
+                  placeholder="e.g., TEL123"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="location" className="text-xs">Location</Label>
+              <Select value={baForm.location} onValueChange={(v) => handleFormChange('location', v)}>
+                <SelectTrigger className="mt-1 h-8 text-sm">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="LF811 - SC">LF811 - SC</SelectItem>
+                  <SelectItem value="LF811 - PO">LF811 - PO</SelectItem>
+                  <SelectItem value="LF811 - FF1">LF811 - FF1</SelectItem>
+                  <SelectItem value="LF811 - FF2">LF811 - FF2</SelectItem>
+                  <SelectItem value="LF812 - SC">LF812 - SC</SelectItem>
+                  <SelectItem value="LF812 - PO">LF812 - PO</SelectItem>
+                  <SelectItem value="LF812 - FF1">LF812 - FF1</SelectItem>
+                  <SelectItem value="LF812 - FF2">LF812 - FF2</SelectItem>
+                  <SelectItem value="MRV811 - Set 1">MRV811 - Set 1</SelectItem>
+                  <SelectItem value="MRV811 - Set 2">MRV811 - Set 2</SelectItem>
+                  <SelectItem value="MRV811 - Set 3">MRV811 - Set 3</SelectItem>
+                  <SelectItem value="MRV811 - Set 4">MRV811 - Set 4</SelectItem>
+                  <SelectItem value="RFV811 - Set 1">RFV811 - Set 1</SelectItem>
+                  <SelectItem value="RFV811 - Set 2">RFV811 - Set 2</SelectItem>
+                  <SelectItem value="RFV811 - Set 3">RFV811 - Set 3</SelectItem>
+                  <SelectItem value="RFV811 - Set 4">RFV811 - Set 4</SelectItem>
+                  <SelectItem value="CFS811">CFS811</SelectItem>
+                  <SelectItem value="SPARE">SPARE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="remarks" className="text-xs">Remarks</Label>
+              <Textarea
+                id="remarks"
+                value={baForm.remarks}
+                onChange={(e) => handleFormChange('remarks', e.target.value)}
+                className="mt-1 h-20 text-sm"
+                placeholder="Notes, condition, etc."
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="is_spare"
+                checked={baForm.is_spare}
+                onCheckedChange={(v) => handleFormChange('is_spare', Boolean(v))}
+              />
+              <Label htmlFor="is_spare" className="text-sm">Mark as SPARE</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditOpen(false)} className="h-8">Cancel</Button>
+            <Button onClick={handleSaveBa} disabled={isSavingBa} className="h-8">
+              {isSavingBa ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add this at the bottom of the component */}
       <BAValidationPanel
