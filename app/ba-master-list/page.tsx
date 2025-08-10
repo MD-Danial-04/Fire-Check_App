@@ -1978,7 +1978,7 @@ export default function BAMasterList() {
                   </Button>
                   
                   {backplateDropdownOpen && (
-                    <div className="absolute top-full left-0 z-50 mt-1 w-96 bg-white border border-gray-200 rounded-md shadow-lg">
+                    <div className="absolute top-full left-0 z-50 mt-1 w-[90vw] max-w-md bg-white border border-gray-200 rounded-md shadow-lg">
                       <div className="grid grid-cols-2 divide-x min-h-48">
                         {/* Left column - Locations */}
                         <div className="p-2">
@@ -2073,7 +2073,7 @@ export default function BAMasterList() {
                   </Button>
                   
                   {cylinderDropdownOpen && (
-                    <div className="absolute top-full right-0 z-50 mt-1 w-96 bg-white border border-gray-200 rounded-md shadow-lg">
+                    <div className="absolute top-full right-0 z-50 mt-1 w-[90vw] max-w-md bg-white border border-gray-200 rounded-md shadow-lg">
                       <div className="grid grid-cols-2 divide-x min-h-48">
                         {/* Left column - Locations */}
                         <div className="p-2">
@@ -2226,7 +2226,7 @@ export default function BAMasterList() {
                 </Button>
                 
                 {locationDropdownOpen && (
-                  <div className="absolute top-full left-0 z-50 mt-1 w-96 bg-white border border-gray-200 rounded-md shadow-lg">
+                  <div className="absolute top-full left-0 z-50 mt-1 w-[90vw] max-w-md bg-white border border-gray-200 rounded-md shadow-lg">
                     <div className="grid grid-cols-2 divide-x min-h-48">
                       {/* Left column - Stations */}
                       <div className="p-2">
