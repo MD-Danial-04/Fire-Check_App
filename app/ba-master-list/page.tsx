@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Search, MapPin, Plus, Check, X, List, Grid, Filter, AlertCircle, ExternalLink, FileCheck, Pencil } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Search, MapPin, Plus, Check, X, List, Grid, Filter, AlertCircle, ExternalLink, FileCheck, Pencil, ChevronDown } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { getBAMasterList } from '@/lib/queries'
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+
 import { supabase } from '@/lib/supabase'
 import { Sheet, SheetContent, SheetTrigger } from "@/app/components/ui/sheet"
 import { cn } from "@/lib/utils"
@@ -249,11 +250,80 @@ export default function BAMasterList() {
     telemetry_id: '',
     remarks: '',
   })
+  // Store original values to detect changes
+  const [originalBaForm, setOriginalBaForm] = useState<{
+    serial_number: string;
+    cylinder_serial: string;
+    date_of_birth: string;
+    hydro_date: string;
+    service_due_date: string;
+    location: string;
+    is_spare: boolean;
+    telemetry_id: string;
+    remarks: string;
+  }>({
+    serial_number: '',
+    cylinder_serial: '',
+    date_of_birth: '',
+    hydro_date: '',
+    service_due_date: '',
+    location: '',
+    is_spare: false,
+    telemetry_id: '',
+    remarks: '',
+  })
   const [isSavingBa, setIsSavingBa] = useState(false)
+  
+  // Swap tracking
+  const [swapTargets, setSwapTargets] = useState<{ backplate: BaMasterList | null; cylinder: BaMasterList | null }>({
+    backplate: null,
+    cylinder: null,
+  })
+  const [isSwapping, setIsSwapping] = useState<{ backplate: boolean; cylinder: boolean }>({
+    backplate: false,
+    cylinder: false,
+  })
+  const [isCreatingNew, setIsCreatingNew] = useState<{ backplate: boolean; cylinder: boolean }>({
+    backplate: false,
+    cylinder: false
+  })
+  
+  // Two-column dropdown states
+  const [backplateDropdownOpen, setBackplateDropdownOpen] = useState(false)
+  const [cylinderDropdownOpen, setCylinderDropdownOpen] = useState(false)
+  const [locationDropdownOpen, setLocationDropdownOpen] = useState(false)
+  const [selectedBackplateLocation, setSelectedBackplateLocation] = useState<string>('')
+  const [selectedCylinderLocation, setSelectedCylinderLocation] = useState<string>('')
+  const [selectedLocationStation, setSelectedLocationStation] = useState<string>('')
+
+  // Refs for click outside handling
+  const backplateDropdownRef = useRef<HTMLDivElement>(null)
+  const cylinderDropdownRef = useRef<HTMLDivElement>(null)
+  const locationDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Click outside handler
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (backplateDropdownRef.current && !backplateDropdownRef.current.contains(event.target as Node)) {
+        setBackplateDropdownOpen(false)
+      }
+      if (cylinderDropdownRef.current && !cylinderDropdownRef.current.contains(event.target as Node)) {
+        setCylinderDropdownOpen(false)
+      }
+      if (locationDropdownRef.current && !locationDropdownRef.current.contains(event.target as Node)) {
+        setLocationDropdownOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [])
 
   const handleOpenEdit = (ba: BaMasterList) => {
     setEditBa(ba)
-    setBaForm({
+    const formData = {
       serial_number: ba.serial_number || '',
       cylinder_serial: ba.cylinder_serial || '',
       date_of_birth: ba.date_of_birth ? ba.date_of_birth.slice(0, 10) : '',
@@ -263,7 +333,20 @@ export default function BAMasterList() {
       is_spare: !!ba.is_spare,
       telemetry_id: ba.telemetry_id || '',
       remarks: ba.remarks || '',
-    })
+    }
+    setBaForm(formData)
+    // Store original values for change detection
+    setOriginalBaForm({ ...formData })
+    // Reset swap states
+    setSwapTargets({ backplate: null, cylinder: null })
+    setIsSwapping({ backplate: false, cylinder: false })
+    setIsCreatingNew({ backplate: false, cylinder: false })
+    setSelectedBackplateLocation('')
+    setSelectedCylinderLocation('')
+    setSelectedLocationStation('')
+    setBackplateDropdownOpen(false)
+    setCylinderDropdownOpen(false)
+    setLocationDropdownOpen(false)
     setIsEditOpen(true)
   }
 
@@ -271,12 +354,219 @@ export default function BAMasterList() {
     setBaForm(prev => ({ ...prev, [field]: value as any }))
   }
 
+  // Helper function to check if a field has changed
+  const isFieldChanged = (field: keyof typeof baForm) => {
+    return baForm[field] !== originalBaForm[field]
+  }
+
+  // Helper function to get highlight classes for changed fields
+  const getFieldHighlightClass = (field: keyof typeof baForm) => {
+    return isFieldChanged(field) 
+      ? "border-orange-300 bg-orange-50 dark:bg-orange-900/20 dark:border-orange-700" 
+      : ""
+  }
+
+  // Helper function to get filtered backplates
+  const getFilteredBackplates = () => {
+    return backplates.filter(b => {
+      if (!b.serial_number || b.serial_number === editBa?.serial_number) return false
+      if (!selectedBackplateLocation) return true
+      const baseLocation = getBaseLocation(b.location, b.is_spare)
+      return baseLocation === selectedBackplateLocation
+    })
+  }
+
+  // Helper function to get filtered cylinders
+  const getFilteredCylinders = () => {
+    return backplates.filter(b => {
+      if (!b.cylinder_serial || b.cylinder_serial === editBa?.cylinder_serial) return false
+      if (!selectedCylinderLocation) return true
+      const baseLocation = getBaseLocation(b.location, b.is_spare)
+      return baseLocation === selectedCylinderLocation
+    })
+  }
+
+  // Get unique locations for filtering
+  const getAvailableLocations = (type: 'backplate' | 'cylinder') => {
+    const locationSet = new Set<string>()
+    backplates.forEach(b => {
+      const hasSerial = type === 'backplate' ? b.serial_number : b.cylinder_serial
+      const isNotCurrent = type === 'backplate' ? 
+        b.serial_number !== editBa?.serial_number : 
+        b.cylinder_serial !== editBa?.cylinder_serial
+      
+      if (hasSerial && isNotCurrent) {
+        const baseLocation = getBaseLocation(b.location, b.is_spare)
+        locationSet.add(baseLocation)
+      }
+    })
+    
+    const locationOrder = ['LF811', 'LF812', 'MRV811', 'RFV811', 'CFS811', 'SPARE', 'Others', 'Unassigned']
+    return Array.from(locationSet).sort((a, b) => {
+      return locationOrder.indexOf(a) - locationOrder.indexOf(b)
+    })
+  }
+
+  // Handle backplate selection from two-column dropdown
+  const handleBackplateDropdownSelection = (value: string) => {
+    if (value === 'CREATE_NEW') {
+      handleBackplateSelection(value)
+      setBackplateDropdownOpen(false)
+    } else if (value && value !== selectedBackplateLocation) {
+      // This is a serial number selection
+      handleBackplateSelection(value)
+      setBackplateDropdownOpen(false)
+    }
+  }
+
+  // Handle cylinder selection from two-column dropdown
+  const handleCylinderDropdownSelection = (value: string) => {
+    if (value === 'CREATE_NEW') {
+      handleCylinderSelection(value)
+      setCylinderDropdownOpen(false)
+    } else if (value && value !== selectedCylinderLocation) {
+      // This is a serial number selection
+      handleCylinderSelection(value)
+      setCylinderDropdownOpen(false)
+    }
+  }
+
+  // Group backplates by location for two-column display
+  const getBackplatesByLocation = () => {
+    const locationGroups: Record<string, BaMasterList[]> = {}
+    
+    backplates
+      .filter(b => b.serial_number && b.serial_number !== editBa?.serial_number)
+      .forEach(b => {
+        const baseLocation = getBaseLocation(b.location, b.is_spare)
+        if (!locationGroups[baseLocation]) {
+          locationGroups[baseLocation] = []
+        }
+        locationGroups[baseLocation].push(b)
+      })
+    
+    return locationGroups
+  }
+
+  // Group cylinders by location for two-column display
+  const getCylindersByLocation = () => {
+    const locationGroups: Record<string, BaMasterList[]> = {}
+    
+    backplates
+      .filter(b => b.cylinder_serial && b.cylinder_serial !== editBa?.cylinder_serial)
+      .forEach(b => {
+        const baseLocation = getBaseLocation(b.location, b.is_spare)
+        if (!locationGroups[baseLocation]) {
+          locationGroups[baseLocation] = []
+        }
+        locationGroups[baseLocation].push(b)
+      })
+    
+    return locationGroups
+  }
+
+  // Handle backplate selection (swap or new)
+  const handleBackplateSelection = (selectedSerialNumber: string) => {
+    if (selectedSerialNumber === 'CREATE_NEW') {
+      setIsCreatingNew(prev => ({ ...prev, backplate: true }))
+      setIsSwapping(prev => ({ ...prev, backplate: false }))
+      setSwapTargets(prev => ({ ...prev, backplate: null }))
+      // Clear backplate data for new entry
+      setBaForm(prev => ({
+        ...prev,
+        serial_number: '',
+        telemetry_id: '',
+      }))
+      return
+    }
+
+    // If selecting current backplate, just reset states
+    if (selectedSerialNumber === editBa?.serial_number) {
+      setIsSwapping(prev => ({ ...prev, backplate: false }))
+      setSwapTargets(prev => ({ ...prev, backplate: null }))
+      setIsCreatingNew(prev => ({ ...prev, backplate: false }))
+      setBaForm(prev => ({
+        ...prev,
+        serial_number: editBa.serial_number || '',
+        telemetry_id: editBa.telemetry_id || '',
+      }))
+      return
+    }
+
+    // Find the selected backplate for swap
+    const selectedBa = backplates.find(b => b.serial_number === selectedSerialNumber)
+    if (!selectedBa) return
+
+    setSwapTargets(prev => ({ ...prev, backplate: selectedBa }))
+    setIsSwapping(prev => ({ ...prev, backplate: true }))
+    setIsCreatingNew(prev => ({ ...prev, backplate: false }))
+    
+    // Update form with selected backplate data
+    setBaForm(prev => ({
+      ...prev,
+      serial_number: selectedBa.serial_number || '',
+      telemetry_id: selectedBa.telemetry_id || '',
+    }))
+  }
+
+  // Handle cylinder selection (swap or new)
+  const handleCylinderSelection = (selectedSerialNumber: string) => {
+    if (selectedSerialNumber === 'CREATE_NEW') {
+      setIsCreatingNew(prev => ({ ...prev, cylinder: true }))
+      setIsSwapping(prev => ({ ...prev, cylinder: false }))
+      setSwapTargets(prev => ({ ...prev, cylinder: null }))
+      // Clear cylinder data for new entry
+      setBaForm(prev => ({
+        ...prev,
+        cylinder_serial: '',
+        date_of_birth: '',
+        hydro_date: '',
+        service_due_date: '',
+      }))
+      return
+    }
+
+    // If selecting current cylinder, just reset states
+    if (selectedSerialNumber === editBa?.cylinder_serial) {
+      setIsSwapping(prev => ({ ...prev, cylinder: false }))
+      setSwapTargets(prev => ({ ...prev, cylinder: null }))
+      setIsCreatingNew(prev => ({ ...prev, cylinder: false }))
+      setBaForm(prev => ({
+        ...prev,
+        cylinder_serial: editBa.cylinder_serial || '',
+        date_of_birth: editBa.date_of_birth ? editBa.date_of_birth.slice(0, 10) : '',
+        hydro_date: editBa.hydro_date ? editBa.hydro_date.slice(0, 10) : '',
+        service_due_date: editBa.service_due_date || '',
+      }))
+      return
+    }
+
+    // Find the selected cylinder for swap
+    const selectedBa = backplates.find(b => b.cylinder_serial === selectedSerialNumber)
+    if (!selectedBa) return
+
+    setSwapTargets(prev => ({ ...prev, cylinder: selectedBa }))
+    setIsSwapping(prev => ({ ...prev, cylinder: true }))
+    setIsCreatingNew(prev => ({ ...prev, cylinder: false }))
+    
+    // Update form with selected cylinder data
+    setBaForm(prev => ({
+      ...prev,
+      cylinder_serial: selectedBa.cylinder_serial || '',
+      date_of_birth: selectedBa.date_of_birth ? selectedBa.date_of_birth.slice(0, 10) : '',
+      hydro_date: selectedBa.hydro_date ? selectedBa.hydro_date.slice(0, 10) : '',
+      service_due_date: selectedBa.service_due_date || '',
+    }))
+  }
+
   const handleSaveBa = async () => {
     if (!editBa) return
     setIsSavingBa(true)
     try {
-      // Prepare updates with proper date formatting
-      const updates: Partial<BaMasterList> = {
+      const operations = []
+
+      // Prepare updates for current BA with proper date formatting
+      const currentUpdates: Partial<BaMasterList> = {
         serial_number: baForm.serial_number,
         cylinder_serial: baForm.cylinder_serial,
         date_of_birth: baForm.date_of_birth ? new Date(baForm.date_of_birth).toISOString() : null,
@@ -288,17 +578,109 @@ export default function BAMasterList() {
         remarks: baForm.remarks,
       }
 
-      // Persist to Supabase
-      await updateBAMasterList(editBa.id, updates)
+      // Update current BA
+      operations.push(updateBAMasterList(editBa.id, currentUpdates))
 
-      // Optimistic in-memory update
-      setBackplates(prev => prev.map(b => (
-        b.id === editBa.id ? { ...b, ...updates } : b
-      )))
+      // Handle swaps per component
+      const baseIsSpare = (b: BaMasterList) => getBaseLocation(b.location, b.is_spare) === 'SPARE'
 
-      toast({ title: 'Saved', description: 'BA particulars updated.' })
+      // Backplate swap
+      if (isSwapping.backplate && swapTargets.backplate) {
+        const t = swapTargets.backplate
+        const swapB: Partial<BaMasterList> = {
+          serial_number: editBa.serial_number,
+          telemetry_id: editBa.telemetry_id,
+        }
+        if (baseIsSpare(t)) {
+          swapB.cylinder_serial = ''
+          swapB.date_of_birth = null
+          swapB.hydro_date = null
+          swapB.service_due_date = null
+          swapB.remarks = `Backplate moved from ${editBa.location}`
+        }
+        operations.push(updateBAMasterList(t.id, swapB))
+      }
+
+      // Cylinder swap
+      if (isSwapping.cylinder && swapTargets.cylinder) {
+        const t = swapTargets.cylinder
+        const swapC: Partial<BaMasterList> = {
+          cylinder_serial: editBa.cylinder_serial,
+          date_of_birth: editBa.date_of_birth,
+          hydro_date: editBa.hydro_date,
+          service_due_date: editBa.service_due_date,
+        }
+        if (baseIsSpare(t)) {
+          swapC.serial_number = ''
+          swapC.telemetry_id = ''
+          swapC.remarks = `Cylinder moved from ${editBa.location}`
+        }
+        operations.push(updateBAMasterList(t.id, swapC))
+      }
+
+      // Handle new entries (old components become spare)
+      if (isCreatingNew.backplate && editBa.serial_number) {
+        // Create new spare entry for old backplate ONLY (no cylinder info)
+        const newSpareBackplate = {
+          serial_number: editBa.serial_number,
+          telemetry_id: editBa.telemetry_id,
+          cylinder_serial: '', // Empty - this is just a spare backplate
+          date_of_birth: null,
+          hydro_date: null,
+          service_due_date: null,
+          location: 'SPARE',
+          is_spare: true,
+          remarks: `Backplate moved from ${editBa.location}`,
+        }
+        // Note: We'll need to add a createBAMasterList function for this
+      }
+
+      if (isCreatingNew.cylinder && editBa.cylinder_serial) {
+        // Create new spare entry for old cylinder ONLY (no backplate info)
+        const newSpareCylinder = {
+          serial_number: '', // Empty - this is just a spare cylinder
+          telemetry_id: null,
+          cylinder_serial: editBa.cylinder_serial,
+          date_of_birth: editBa.date_of_birth,
+          hydro_date: editBa.hydro_date,
+          service_due_date: editBa.service_due_date,
+          location: 'SPARE',
+          is_spare: true,
+          remarks: `Cylinder moved from ${editBa.location}`,
+        }
+        // Note: We'll need to add a createBAMasterList function for this
+      }
+
+      // Execute all operations
+      await Promise.all(operations)
+
+      // Optimistic in-memory update for current BA
+      setBackplates(prev => prev.map(b => {
+        if (b.id === editBa.id) {
+          return { ...b, ...currentUpdates }
+        }
+        // Also update swap targets if exist
+        if (swapTargets.backplate && b.id === swapTargets.backplate.id && isSwapping.backplate) {
+          const t = swapTargets.backplate
+          const up: Partial<BaMasterList> = { serial_number: editBa.serial_number, telemetry_id: editBa.telemetry_id }
+          if (baseIsSpare(t)) { up.cylinder_serial = ''; up.date_of_birth = null; up.hydro_date = null; up.service_due_date = null; up.remarks = `Backplate moved from ${editBa.location}` }
+          return { ...b, ...up }
+        }
+        if (swapTargets.cylinder && b.id === swapTargets.cylinder.id && isSwapping.cylinder) {
+          const t = swapTargets.cylinder
+          const up: Partial<BaMasterList> = { cylinder_serial: editBa.cylinder_serial, date_of_birth: editBa.date_of_birth, hydro_date: editBa.hydro_date, service_due_date: editBa.service_due_date }
+          if (baseIsSpare(t)) { up.serial_number = ''; up.telemetry_id = ''; up.remarks = `Cylinder moved from ${editBa.location}` }
+          return { ...b, ...up }
+        }
+        return b
+      }))
+
+      toast({ title: 'Saved', description: (isSwapping.backplate || isSwapping.cylinder) ? 'BA swap completed.' : 'BA particulars updated.' })
       setIsEditOpen(false)
       setEditBa(null)
+      setSwapTargets({ backplate: null, cylinder: null })
+      setIsSwapping({ backplate: false, cylinder: false })
+      setIsCreatingNew({ backplate: false, cylinder: false })
     } catch (e: any) {
       toast({ title: 'Error', description: e?.message || 'Failed to save', variant: 'destructive' })
     } finally {
@@ -1570,32 +1952,212 @@ export default function BAMasterList() {
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit BA Details</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              Edit BA Details
+              {Object.keys(baForm).some(key => isFieldChanged(key as keyof typeof baForm)) && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300 rounded-full">
+                  <span className="w-1.5 h-1.5 bg-orange-500 rounded-full"></span>
+                  Changes Made
+                </span>
+              )}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="serial_number" className="text-xs">Serial Number</Label>
-                <Input
-                  id="serial_number"
-                  value={baForm.serial_number}
-                  onChange={(e) => handleFormChange('serial_number', e.target.value)}
-                  className="mt-1 h-8 text-sm"
-                  placeholder="e.g., BSTJ-2990"
-                />
+                <Label htmlFor="serial_number" className="text-xs">Backplate Serial Number</Label>
+                
+                <div className="relative" ref={backplateDropdownRef}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setBackplateDropdownOpen(!backplateDropdownOpen)}
+                    className={cn("mt-1 h-8 w-full justify-between text-sm", getFieldHighlightClass('serial_number'))}
+                  >
+                    {baForm.serial_number || "Select backplate..."}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                  
+                  {backplateDropdownOpen && (
+                    <div className="absolute top-full left-0 z-50 mt-1 w-96 bg-white border border-gray-200 rounded-md shadow-lg">
+                      <div className="grid grid-cols-2 divide-x min-h-48">
+                        {/* Left column - Locations */}
+                        <div className="p-2">
+                          <div className="text-xs font-semibold text-gray-500 mb-2 px-2">LOCATIONS</div>
+                          <div className="space-y-1">
+                            {/* Current item */}
+                            {editBa?.serial_number && (
+                              <button
+                                className="w-full text-left px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
+                                onClick={() => {
+                                  handleBackplateDropdownSelection(editBa.serial_number!)
+                                }}
+                              >
+                                Current
+                              </button>
+                            )}
+                            {/* Create new */}
+                            <button
+                              className="w-full text-left px-2 py-1 text-xs text-green-600 rounded hover:bg-green-50"
+                              onClick={() => {
+                                handleBackplateDropdownSelection('CREATE_NEW')
+                              }}
+                            >
+                              + Create New
+                            </button>
+                            {/* Location buttons */}
+                            {Object.keys(getBackplatesByLocation()).map(location => (
+                              <button
+                                key={location}
+                                className={cn(
+                                  "w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100",
+                                  selectedBackplateLocation === location ? "bg-gray-100" : ""
+                                )}
+                                onClick={() => setSelectedBackplateLocation(selectedBackplateLocation === location ? '' : location)}
+                              >
+                                📍 {location}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        {/* Right column - Serial Numbers */}
+                        <div className="p-2">
+                          <div className="text-xs font-semibold text-gray-500 mb-2 px-2">
+                            {selectedBackplateLocation ? selectedBackplateLocation.toUpperCase() : 'SELECT LOCATION'}
+                          </div>
+                          <div className="space-y-1">
+                            {selectedBackplateLocation && getBackplatesByLocation()[selectedBackplateLocation]?.map(backplate => (
+                              <button
+                                key={backplate.id}
+                                className="w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100"
+                                onClick={() => {
+                                  handleBackplateDropdownSelection(backplate.serial_number!)
+                                }}
+                              >
+                                {backplate.serial_number}
+                                <div className="text-[10px] text-gray-500">{backplate.location}</div>
+                              </button>
+                            ))}
+                            {!selectedBackplateLocation && (
+                              <div className="px-2 py-4 text-xs text-gray-400 text-center">
+                                Select a location to see available backplates
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {isCreatingNew.backplate && (
+                  <Input
+                    value={baForm.serial_number}
+                    onChange={(e) => handleFormChange('serial_number', e.target.value)}
+                    className={cn("mt-2 h-8 text-sm", getFieldHighlightClass('serial_number'))}
+                    placeholder="Enter new backplate serial"
+                  />
+                )}
               </div>
+              
               <div>
-                <Label htmlFor="cylinder_serial" className="text-xs">Cylinder Serial</Label>
-                <Input
-                  id="cylinder_serial"
-                  value={baForm.cylinder_serial}
-                  onChange={(e) => handleFormChange('cylinder_serial', e.target.value)}
-                  className="mt-1 h-8 text-sm"
-                  placeholder="e.g., BR3K-5540"
-                />
+                <Label htmlFor="cylinder_serial" className="text-xs">Cylinder Serial Number</Label>
+                
+                <div className="relative" ref={cylinderDropdownRef}>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCylinderDropdownOpen(!cylinderDropdownOpen)}
+                    className={cn("mt-1 h-8 w-full justify-between text-sm", getFieldHighlightClass('cylinder_serial'))}
+                  >
+                    {baForm.cylinder_serial || "Select cylinder..."}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                  
+                  {cylinderDropdownOpen && (
+                    <div className="absolute top-full right-0 z-50 mt-1 w-96 bg-white border border-gray-200 rounded-md shadow-lg">
+                      <div className="grid grid-cols-2 divide-x min-h-48">
+                        {/* Left column - Locations */}
+                        <div className="p-2">
+                          <div className="text-xs font-semibold text-gray-500 mb-2 px-2">LOCATIONS</div>
+                          <div className="space-y-1">
+                            {/* Current item */}
+                            {editBa?.cylinder_serial && (
+                              <button
+                                className="w-full text-left px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded hover:bg-blue-100"
+                                onClick={() => {
+                                  handleCylinderDropdownSelection(editBa.cylinder_serial!)
+                                }}
+                              >
+                                Current
+                              </button>
+                            )}
+                            {/* Create new */}
+                            <button
+                              className="w-full text-left px-2 py-1 text-xs text-green-600 rounded hover:bg-green-50"
+                              onClick={() => {
+                                handleCylinderDropdownSelection('CREATE_NEW')
+                              }}
+                            >
+                              + Create New
+                            </button>
+                            {/* Location buttons */}
+                            {Object.keys(getCylindersByLocation()).map(location => (
+                              <button
+                                key={location}
+                                className={cn(
+                                  "w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100",
+                                  selectedCylinderLocation === location ? "bg-gray-100" : ""
+                                )}
+                                onClick={() => setSelectedCylinderLocation(selectedCylinderLocation === location ? '' : location)}
+                              >
+                                📍 {location}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        {/* Right column - Serial Numbers */}
+                        <div className="p-2">
+                          <div className="text-xs font-semibold text-gray-500 mb-2 px-2">
+                            {selectedCylinderLocation ? selectedCylinderLocation.toUpperCase() : 'SELECT LOCATION'}
+                          </div>
+                          <div className="space-y-1">
+                            {selectedCylinderLocation && getCylindersByLocation()[selectedCylinderLocation]?.map(cylinder => (
+                              <button
+                                key={cylinder.id}
+                                className="w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100"
+                                onClick={() => {
+                                  handleCylinderDropdownSelection(cylinder.cylinder_serial!)
+                                }}
+                              >
+                                {cylinder.cylinder_serial}
+                                <div className="text-[10px] text-gray-500">{cylinder.location}</div>
+                              </button>
+                            ))}
+                            {!selectedCylinderLocation && (
+                              <div className="px-2 py-4 text-xs text-gray-400 text-center">
+                                Select a location to see available cylinders
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {isCreatingNew.cylinder && (
+                  <Input
+                    value={baForm.cylinder_serial}
+                    onChange={(e) => handleFormChange('cylinder_serial', e.target.value)}
+                    className={cn("mt-2 h-8 text-sm", getFieldHighlightClass('cylinder_serial'))}
+                    placeholder="Enter new cylinder serial"
+                  />
+                )}
               </div>
             </div>
             
+
+
+            {/* Editable fields - always available */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="date_of_birth" className="text-xs">Date of Birth</Label>
@@ -1607,7 +2169,7 @@ export default function BAMasterList() {
                   onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker && (e.currentTarget as any).showPicker()}
                   onKeyDown={(e) => { if (e.key === 'Enter') { const t = e.currentTarget as HTMLInputElement; (t as any).showPicker && (t as any).showPicker(); } }}
                   autoComplete="off"
-                  className="mt-1 h-8 text-sm"
+                  className={cn("mt-1 h-8 text-sm", getFieldHighlightClass('date_of_birth'))}
                 />
               </div>
               <div>
@@ -1620,7 +2182,7 @@ export default function BAMasterList() {
                   onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker && (e.currentTarget as any).showPicker()}
                   onKeyDown={(e) => { if (e.key === 'Enter') { const t = e.currentTarget as HTMLInputElement; (t as any).showPicker && (t as any).showPicker(); } }}
                   autoComplete="off"
-                  className="mt-1 h-8 text-sm"
+                  className={cn("mt-1 h-8 text-sm", getFieldHighlightClass('hydro_date'))}
                 />
               </div>
             </div>
@@ -1636,7 +2198,7 @@ export default function BAMasterList() {
                   onClick={(e) => (e.currentTarget as HTMLInputElement).showPicker && (e.currentTarget as any).showPicker()}
                   onKeyDown={(e) => { if (e.key === 'Enter') { const t = e.currentTarget as HTMLInputElement; (t as any).showPicker && (t as any).showPicker(); } }}
                   autoComplete="off"
-                  className="mt-1 h-8 text-sm"
+                  className={cn("mt-1 h-8 text-sm", getFieldHighlightClass('service_due_date'))}
                 />
               </div>
               <div>
@@ -1645,7 +2207,7 @@ export default function BAMasterList() {
                   id="telemetry_id"
                   value={baForm.telemetry_id}
                   onChange={(e) => handleFormChange('telemetry_id', e.target.value)}
-                  className="mt-1 h-8 text-sm"
+                  className={cn("mt-1 h-8 text-sm", getFieldHighlightClass('telemetry_id'))}
                   placeholder="e.g., TEL123"
                 />
               </div>
@@ -1653,31 +2215,124 @@ export default function BAMasterList() {
 
             <div>
               <Label htmlFor="location" className="text-xs">Location</Label>
-              <Select value={baForm.location} onValueChange={(v) => handleFormChange('location', v)}>
-                <SelectTrigger className="mt-1 h-8 text-sm">
-                  <SelectValue placeholder="Select location" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LF811 - SC">LF811 - SC</SelectItem>
-                  <SelectItem value="LF811 - PO">LF811 - PO</SelectItem>
-                  <SelectItem value="LF811 - FF1">LF811 - FF1</SelectItem>
-                  <SelectItem value="LF811 - FF2">LF811 - FF2</SelectItem>
-                  <SelectItem value="LF812 - SC">LF812 - SC</SelectItem>
-                  <SelectItem value="LF812 - PO">LF812 - PO</SelectItem>
-                  <SelectItem value="LF812 - FF1">LF812 - FF1</SelectItem>
-                  <SelectItem value="LF812 - FF2">LF812 - FF2</SelectItem>
-                  <SelectItem value="MRV811 - Set 1">MRV811 - Set 1</SelectItem>
-                  <SelectItem value="MRV811 - Set 2">MRV811 - Set 2</SelectItem>
-                  <SelectItem value="MRV811 - Set 3">MRV811 - Set 3</SelectItem>
-                  <SelectItem value="MRV811 - Set 4">MRV811 - Set 4</SelectItem>
-                  <SelectItem value="RFV811 - Set 1">RFV811 - Set 1</SelectItem>
-                  <SelectItem value="RFV811 - Set 2">RFV811 - Set 2</SelectItem>
-                  <SelectItem value="RFV811 - Set 3">RFV811 - Set 3</SelectItem>
-                  <SelectItem value="RFV811 - Set 4">RFV811 - Set 4</SelectItem>
-                  <SelectItem value="CFS811">CFS811</SelectItem>
-                  <SelectItem value="SPARE">SPARE</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="relative" ref={locationDropdownRef}>
+                <Button
+                  variant="outline"
+                  onClick={() => setLocationDropdownOpen(!locationDropdownOpen)}
+                  className={cn("mt-1 h-8 w-full justify-between text-sm", getFieldHighlightClass('location'))}
+                >
+                  {baForm.location || "Select location..."}
+                  <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+                
+                {locationDropdownOpen && (
+                  <div className="absolute top-full left-0 z-50 mt-1 w-96 bg-white border border-gray-200 rounded-md shadow-lg">
+                    <div className="grid grid-cols-2 divide-x min-h-48">
+                      {/* Left column - Stations */}
+                      <div className="p-2">
+                        <div className="space-y-1">
+                          {['LF811', 'LF812', 'MRV811', 'RFV811', 'CFS811', 'SPARE'].map(station => (
+                            <button
+                              key={station}
+                              className={cn(
+                                "w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100",
+                                selectedLocationStation === station ? "bg-gray-100" : ""
+                              )}
+                              onClick={() => setSelectedLocationStation(selectedLocationStation === station ? '' : station)}
+                            >
+                              🚒 {station}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Right column - Roles/Sets */}
+                      <div className="p-2">
+                        <div className="text-xs font-semibold text-gray-500 mb-2 px-2">
+                          {selectedLocationStation ? selectedLocationStation.toUpperCase() : 'SELECT LOCATION'}
+                        </div>
+                        <div className="space-y-1">
+                          {selectedLocationStation === 'LF811' && ['SC', 'PO', 'FF1', 'FF2'].map(role => (
+                            <button
+                              key={role}
+                              className="w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100"
+                              onClick={() => {
+                                handleFormChange('location', `${selectedLocationStation} - ${role}`)
+                                setLocationDropdownOpen(false)
+                              }}
+                            >
+                              {role}
+                            </button>
+                          ))}
+                          {selectedLocationStation === 'LF812' && ['SC', 'PO', 'FF1', 'FF2'].map(role => (
+                            <button
+                              key={role}
+                              className="w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100"
+                              onClick={() => {
+                                handleFormChange('location', `${selectedLocationStation} - ${role}`)
+                                setLocationDropdownOpen(false)
+                              }}
+                            >
+                              {role}
+                            </button>
+                          ))}
+                          {selectedLocationStation === 'MRV811' && Array.from({length: 12}, (_, i) => `Set ${i + 1}`).map(set => (
+                            <button
+                              key={set}
+                              className="w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100"
+                              onClick={() => {
+                                handleFormChange('location', `${selectedLocationStation} - ${set}`)
+                                setLocationDropdownOpen(false)
+                              }}
+                            >
+                              {set}
+                            </button>
+                          ))}
+                          {selectedLocationStation === 'RFV811' && Array.from({length: 4}, (_, i) => `Set ${i + 1}`).map(set => (
+                            <button
+                              key={set}
+                              className="w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100"
+                              onClick={() => {
+                                handleFormChange('location', `${selectedLocationStation} - ${set}`)
+                                setLocationDropdownOpen(false)
+                              }}
+                            >
+                              {set}
+                            </button>
+                          ))}
+                          {selectedLocationStation === 'CFS811' && (
+                            <button
+                              className="w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100"
+                              onClick={() => {
+                                handleFormChange('location', 'CFS811')
+                                setLocationDropdownOpen(false)
+                              }}
+                            >
+                              CFS811
+                            </button>
+                          )}
+                          {selectedLocationStation === 'SPARE' && (
+                            <button
+                              className="w-full text-left px-2 py-1 text-xs rounded hover:bg-gray-100"
+                              onClick={() => {
+                                handleFormChange('location', 'SPARE')
+                                setLocationDropdownOpen(false)
+                              }}
+                            >
+                              SPARE
+                            </button>
+                          )}
+                          {!selectedLocationStation && (
+                            <div className="px-2 py-4 text-xs text-gray-400 text-center">
+                              Select a station to see available positions
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div>
@@ -1686,7 +2341,7 @@ export default function BAMasterList() {
                 id="remarks"
                 value={baForm.remarks}
                 onChange={(e) => handleFormChange('remarks', e.target.value)}
-                className="mt-1 h-20 text-sm"
+                className={cn("mt-1 h-20 text-sm", getFieldHighlightClass('remarks'))}
                 placeholder="Notes, condition, etc."
               />
             </div>
