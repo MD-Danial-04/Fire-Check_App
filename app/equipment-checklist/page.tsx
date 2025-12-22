@@ -1655,7 +1655,7 @@ export default function EquipmentChecklistPage() {
                       className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 flex items-center gap-1 sm:gap-2 border-blue-500 text-blue-600 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-900/20"
                       asChild
                     >
-                      <Link href="https://form.gov.sg/63c8b31edd51570011467ead" target="_blank" rel="noopener noreferrer">
+                      <Link href="https://form.gov.sg/688c1f79f7a36974c578d8df" target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         <span className="hidden sm:inline">Open Vehicle Form</span>
                         <span className="sm:hidden">Form</span>
