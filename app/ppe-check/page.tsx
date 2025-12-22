@@ -90,6 +90,27 @@ function PPECheckClient() {
   // Use the singleton Supabase client
   const supabase = getSupabaseClient();
   
+  if (!supabase) {
+    return (
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-3 px-4 py-10">
+        <h1 className="text-balance text-2xl font-semibold tracking-tight">
+          Supabase is not configured
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          This page needs <code className="rounded bg-muted px-1 py-0.5">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
+          <code className="rounded bg-muted px-1 py-0.5">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to be set.
+        </p>
+        <div className="rounded-lg border bg-card p-4 text-sm">
+          <p className="font-medium">Fix</p>
+          <ul className="mt-2 list-disc pl-5 text-muted-foreground">
+            <li>Add the env vars to your <code className="rounded bg-muted px-1 py-0.5">.env.local</code></li>
+            <li>Restart <code className="rounded bg-muted px-1 py-0.5">next dev</code></li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
+
   // Add state for reconnection
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [connectionFailed, setConnectionFailed] = useState(false);

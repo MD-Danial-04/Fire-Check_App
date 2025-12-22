@@ -5,23 +5,31 @@ export interface Database {
         Row: Personnel
         Insert: Omit<Personnel, 'id'>
         Update: Partial<Omit<Personnel, 'id'>>
+        Relationships: []
       }
       duty_sheets: {
         Row: DutySheet
         Insert: Omit<DutySheet, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<DutySheet, 'id' | 'created_at' | 'updated_at'>>
+        Relationships: []
       }
       manning_list: {
         Row: ManningList
         Insert: Omit<ManningList, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<ManningList, 'id' | 'created_at' | 'updated_at'>>
+        Relationships: []
       }
       vehicle_configs: {
         Row: VehicleConfig
         Insert: Omit<VehicleConfig, 'id' | 'created_at' | 'updated_at'>
         Update: Partial<Omit<VehicleConfig, 'id' | 'created_at' | 'updated_at'>>
+        Relationships: []
       }
     }
+    Views: Record<string, never>
+    Functions: Record<string, never>
+    Enums: Record<string, never>
+    CompositeTypes: Record<string, never>
   }
 }
 
