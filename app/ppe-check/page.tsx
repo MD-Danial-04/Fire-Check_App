@@ -951,6 +951,15 @@ function PPECheckClient() {
       return;
     }
     
+    if (!supabase) {
+      toast({
+        title: "Error",
+        description: "Database connection not available",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
       const { data, error } = await supabase
         .from('form_responses')
