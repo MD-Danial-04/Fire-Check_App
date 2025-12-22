@@ -454,7 +454,7 @@ function PPECheckClient() {
         
         // If there are existing channels, clean them up first
         for (const ch of existingDataChannels) {
-          if (ch !== realtimeChannel && supabase) {
+          if (ch !== realtimeChannel) {
             try {
               console.log(`Cleaning up old data channel: ${ch.topic}`);
               await supabase.removeChannel(ch);
@@ -468,7 +468,7 @@ function PPECheckClient() {
         }
         
         // Clean up existing channel
-        if (realtimeChannel && supabase) {
+        if (realtimeChannel) {
           try {
             await supabase.removeChannel(realtimeChannel);
             console.log('Removed existing realtime channel');
@@ -620,7 +620,7 @@ function PPECheckClient() {
         
         // If there are existing channels, clean them up first
         for (const ch of existingFormChannels) {
-          if (ch !== formResponsesChannel && supabase) {
+          if (ch !== formResponsesChannel) {
             try {
               console.log(`Cleaning up old form response channel: ${ch.topic}`);
               await supabase.removeChannel(ch);
@@ -634,7 +634,7 @@ function PPECheckClient() {
         }
         
         // Clean up existing channel
-        if (formResponsesChannel && supabase) {
+        if (formResponsesChannel) {
           try {
             await supabase.removeChannel(formResponsesChannel);
             console.log('Removed existing form responses channel');
@@ -951,15 +951,6 @@ function PPECheckClient() {
       return;
     }
     
-    if (!supabase) {
-      toast({
-        title: "Error",
-        description: "Database connection not available",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     try {
       const { data, error } = await supabase
         .from('form_responses')
@@ -1013,15 +1004,6 @@ function PPECheckClient() {
   };
 
   const handleResetResponseId = async () => {
-    if (!supabase) {
-      toast({
-        title: "Error",
-        description: "Database connection not available",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     try {
       console.log('Starting reset operation...');
       
@@ -1107,15 +1089,6 @@ function PPECheckClient() {
   };
 
   const saveResponseIdForPerson = async (personName: string, responseId: string) => {
-    if (!supabase) {
-      toast({
-        title: "Error",
-        description: "Database connection not available",
-        variant: "destructive",
-      });
-      return;
-    }
-    
     try {
       const { data, error } = await supabase
         .from('form_responses')
