@@ -399,6 +399,17 @@ export default function EquipmentChecklistPage() {
       ]
     },
     {
+      title: "VEHICLE LPT",
+      items: [
+        { id: 1, name: "CFS FRC (QX1859E)", checked: false },
+        { id: 2, name: "Class 4 Truck (YN4304C)", checked: false },
+        { id: 3, name: "LF811 (GBF8661J)", checked: false },
+        { id: 4, name: "LF812 (GBD6351C)", checked: false },
+        { id: 5, name: "Admin FRC (QX1034T)", checked: false },
+        { id: 6, name: "Spare LF (GBD7755P)", checked: false },
+      ]
+    },
+    {
       title: "VEHICLE FPT",
       items: [
         { id: 1, name: "CFS FRC (QX1859E)", checked: false },
@@ -450,6 +461,14 @@ export default function EquipmentChecklistPage() {
           { id: 5, name: "Admin FRC (QX1034T)", checked: false },
           { id: 6, name: "Spare LF (GBF8661J)", checked: false },
         ],
+        "VEHICLE LPT": [
+          { id: 1, name: "CFS FRC (QX1859E)", checked: false },
+          { id: 2, name: "Class 4 Truck (YN4304C)", checked: false },
+          { id: 3, name: "LF811 (GBF8661J)", checked: false },
+          { id: 4, name: "LF812 (GBD6351C)", checked: false },
+          { id: 5, name: "Admin FRC (QX1034T)", checked: false },
+          { id: 6, name: "Spare LF (GBD7755P)", checked: false },
+        ],
         "BWC": [
           { id: 1, name: "G0247 8417", checked: false },
           { id: 2, name: "G0247 8421", checked: false },
@@ -498,7 +517,7 @@ export default function EquipmentChecklistPage() {
       
       // Sort sections in the desired order
       newSections.sort((a, b) => {
-        const order = ['ARMOURY', 'VEHICLE FPT', 'BWC'];
+        const order = ['ARMOURY', 'VEHICLE LPT', 'VEHICLE FPT', 'BWC'];
         return order.indexOf(a.title) - order.indexOf(b.title);
       });
       
@@ -636,11 +655,10 @@ export default function EquipmentChecklistPage() {
         return;
       }
       
-      // Organize data into sections (UI intentionally hides VEHICLE LPT / Last Parade)
+      // Organize data into sections
       const groupedBySection: Record<string, ChecklistItem[]> = {};
       
       data.forEach(item => {
-        if (item.section === 'VEHICLE LPT') return;
         if (!groupedBySection[item.section]) {
           groupedBySection[item.section] = [];
         }
@@ -658,7 +676,7 @@ export default function EquipmentChecklistPage() {
       });
       
       // Create sections array in the preferred order
-      const sectionOrder = ["ARMOURY", "VEHICLE FPT", "BWC"];
+      const sectionOrder = ["ARMOURY", "VEHICLE LPT", "VEHICLE FPT", "BWC"];
       const newSections: ChecklistSection[] = sectionOrder.map(title => ({
         title,
         items: groupedBySection[title] || []
@@ -680,6 +698,7 @@ export default function EquipmentChecklistPage() {
       if (process.env.NODE_ENV === 'development') {
         console.log('Sections state updated: ', newSections);
         console.log('Vehicle FPT items: ', newSections.find(s => s.title === "VEHICLE FPT")?.items);
+        console.log('Vehicle LPT items: ', newSections.find(s => s.title === "VEHICLE LPT")?.items);
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1087,8 +1106,12 @@ export default function EquipmentChecklistPage() {
   };
 
   const isVehicleSection = (title: string) => {
-    // UI hides VEHICLE LPT / Last Parade. Only treat FPT as "vehicle section" in the UI.
-    return title === "VEHICLE FPT";
+    return title === "VEHICLE FPT" || title === "VEHICLE LPT";
+  };
+
+  const getSectionTitleForDisplay = (title: string) => {
+    if (title === "VEHICLE LPT") return "VEHICLE ARMOURY";
+    return title;
   };
 
   const handleRefresh = async () => {
@@ -1617,7 +1640,7 @@ export default function EquipmentChecklistPage() {
             <Card key={section.title} className="overflow-hidden">
               <CardHeader className="px-4 md:px-6 py-2.5 md:py-4 border-b border-gray-200 dark:border-gray-800">
                 <div className="flex justify-between items-center">
-                  <CardTitle className="text-base sm:text-lg">{section.title}</CardTitle>
+                  <CardTitle className="text-base sm:text-lg">{getSectionTitleForDisplay(section.title)}</CardTitle>
                   {section.title === "ARMOURY" && (
                     <Button
                       variant="outline"
@@ -2451,9 +2474,9 @@ export default function EquipmentChecklistPage() {
         <Dialog open={isAddVehicleDialogOpen} onOpenChange={setIsAddVehicleDialogOpen}>
           <DialogContent className="max-w-[90%] sm:max-w-md p-4 sm:p-6">
             <DialogHeader className="space-y-2">
-              <DialogTitle className="text-base sm:text-lg">Add Vehicle to FPT & LPT</DialogTitle>
+              <DialogTitle className="text-base sm:text-lg">Add Vehicle to FPT & Vehicle Armoury</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                This will add a new vehicle to both VEHICLE FPT and VEHICLE LPT sections with the same item ID.
+                This will add a new vehicle to both VEHICLE FPT and VEHICLE ARMOURY sections with the same item ID.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 py-2 sm:py-4">
@@ -2503,7 +2526,7 @@ export default function EquipmentChecklistPage() {
             <DialogHeader className="space-y-2">
               <DialogTitle>Remove Vehicle</DialogTitle>
               <DialogDescription>
-                Are you sure you want to remove <b>{vehicleToRemove?.name}</b> from both VEHICLE FPT and VEHICLE LPT? This cannot be undone.
+                Are you sure you want to remove <b>{vehicleToRemove?.name}</b> from both VEHICLE FPT and VEHICLE ARMOURY? This cannot be undone.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="sm:justify-end gap-2 sm:gap-3">
