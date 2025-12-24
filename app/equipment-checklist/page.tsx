@@ -46,6 +46,7 @@ interface ChecklistSection {
 
 export default function EquipmentChecklistPage() {
   const { toast } = useToast();
+  const ARMOURY_PORTAL_URL = "https://armoury.gov.sg/lists";
   // Initialize Supabase client
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1648,14 +1649,28 @@ export default function EquipmentChecklistPage() {
                       className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 flex items-center gap-1 sm:gap-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/20"
                       asChild
                     >
-                      <Link href="https://armoury.gov.sg/sign-in?inviteCode=team-clomngf8o29tj305957m6wyyj" target="_blank" rel="noopener noreferrer">
+                      <Link href={ARMOURY_PORTAL_URL} target="_blank" rel="noopener noreferrer">
                         <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         <span className="hidden sm:inline">Open Armoury Portal</span>
                         <span className="sm:hidden">Portal</span>
                       </Link>
                     </Button>
                   )}
-                  {(section.title === "VEHICLE FPT" || section.title === "VEHICLE LPT") && (
+                  {section.title === "VEHICLE LPT" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 sm:h-8 text-xs sm:text-sm px-2 sm:px-3 flex items-center gap-1 sm:gap-2 border-amber-500 text-amber-600 hover:bg-amber-50 dark:border-amber-400 dark:text-amber-400 dark:hover:bg-amber-900/20"
+                      asChild
+                    >
+                      <Link href={ARMOURY_PORTAL_URL} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        <span className="hidden sm:inline">Open Armoury Portal</span>
+                        <span className="sm:hidden">Portal</span>
+                      </Link>
+                    </Button>
+                  )}
+                  {section.title === "VEHICLE FPT" && (
                     <Button
                       variant="outline"
                       size="sm"
