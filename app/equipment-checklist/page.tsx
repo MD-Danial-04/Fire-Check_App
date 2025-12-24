@@ -1004,8 +1004,9 @@ export default function EquipmentChecklistPage() {
       checked: checker ? true : currentItem.checked
     };
     
-    // For vehicle sections, also set a default fuel level if not already set
-    if (checker && isVehicleSection(sections[sectionIndex].title)) {
+    // For VEHICLE FPT, also set a default fuel level if not already set.
+    // Vehicle Armoury (VEHICLE LPT) UI hides fuel + response ID.
+    if (checker && sections[sectionIndex].title === "VEHICLE FPT") {
       // Set default fuel level to "Pending" if not already set
       if (!updatedItem.status) {
         updatedItem.status = "Pending";
@@ -1106,9 +1107,9 @@ export default function EquipmentChecklistPage() {
     );
   };
 
-  const isVehicleSection = (title: string) => {
-    return title === "VEHICLE FPT" || title === "VEHICLE LPT";
-  };
+  const isVehicleFptSection = (title: string) => title === "VEHICLE FPT";
+  const isVehicleArmourySection = (title: string) => title === "VEHICLE LPT";
+  const isVehicleLikeSection = (title: string) => isVehicleFptSection(title) || isVehicleArmourySection(title);
 
   const getSectionTitleForDisplay = (title: string) => {
     if (title === "VEHICLE LPT") return "VEHICLE ARMOURY";
@@ -1126,7 +1127,7 @@ export default function EquipmentChecklistPage() {
 
   const handleEditItem = (sectionIndex: number, itemIndex: number) => {
     const item = sections[sectionIndex].items[itemIndex];
-    const isVehicle = isVehicleSection(sections[sectionIndex].title);
+    const isVehicle = isVehicleLikeSection(sections[sectionIndex].title);
     
     if (isVehicle) {
       const [name, plateNumber] = item.name.split(' (');
@@ -1381,7 +1382,7 @@ export default function EquipmentChecklistPage() {
     const { sectionIndex, itemIndex, name, plateNumber } = editingVehicle;
     const section = sections[sectionIndex];
     const item = section.items[itemIndex];
-    const isVehicle = isVehicleSection(section.title);
+    const isVehicle = isVehicleLikeSection(section.title);
     const newName = isVehicle ? `${name} (${plateNumber})` : name;
 
     try {
@@ -1718,7 +1719,7 @@ export default function EquipmentChecklistPage() {
                         <tr>
                           <th className="w-[200px] px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                             {section.title === "ARMOURY" ? "Appliance" : 
-                             isVehicleSection(section.title) ? "Vehicle" : 
+                             isVehicleLikeSection(section.title) ? "Vehicle" : 
                              section.title === "BWC" ? "Serial Number" : "Item"}
                           </th>
                           <th className="w-[100px] px-4 py-3 text-center text-sm font-medium text-muted-foreground">Status</th>
@@ -1729,7 +1730,7 @@ export default function EquipmentChecklistPage() {
                               </th>
                               <th className="w-[100px] px-4 py-3 text-center text-sm font-medium text-muted-foreground">Clear</th>
                             </>
-                          ) : isVehicleSection(section.title) ? (
+                          ) : isVehicleFptSection(section.title) ? (
                             <>
                               <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                                 <span className="pl-3">Checker</span>
@@ -1739,6 +1740,13 @@ export default function EquipmentChecklistPage() {
                               </th>
                               <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
                                 <span className="pl-3">Response ID</span>
+                              </th>
+                              <th className="w-[100px] px-4 py-3 text-center text-sm font-medium text-muted-foreground">Clear</th>
+                            </>
+                          ) : isVehicleArmourySection(section.title) ? (
+                            <>
+                              <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                                <span className="pl-3">Checker</span>
                               </th>
                               <th className="w-[100px] px-4 py-3 text-center text-sm font-medium text-muted-foreground">Clear</th>
                             </>
@@ -1764,7 +1772,7 @@ export default function EquipmentChecklistPage() {
                             <td className="px-4 py-3 text-sm font-medium text-neutral-700 dark:text-neutral-300 group">
                               <div className="flex items-center justify-between">
                                 <span>{item.name}</span>
-                                {(section.title === "ARMOURY" || section.title === "BWC" || isVehicleSection(section.title)) && (
+                                {(section.title === "ARMOURY" || section.title === "BWC" || isVehicleLikeSection(section.title)) && (
                                   <Button
                                     variant="ghost"
                                     size="icon"
@@ -1859,7 +1867,7 @@ export default function EquipmentChecklistPage() {
                                   </Button>
                                 </td>
                               </>
-                            ) : isVehicleSection(section.title) ? (
+                            ) : isVehicleFptSection(section.title) ? (
                               <>
                                 <td className="px-4 py-3">
                                   <Select
@@ -1959,6 +1967,50 @@ export default function EquipmentChecklistPage() {
                                       <span className="ml-1 text-red-500 animate-pulse-medium">*</span>
                                     ) : null}
                                   </div>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleClearItem(sectionIndex, itemIndex)}
+                                    className="h-6 w-6 p-0 transition-colors duration-150"
+                                    aria-label={`Clear ${item.name}`}
+                                  >
+                                    <X className="h-3.5 w-3.5 text-red-500" />
+                                  </Button>
+                                </td>
+                              </>
+                            ) : isVehicleArmourySection(section.title) ? (
+                              <>
+                                <td className="px-4 py-3">
+                                  <Select
+                                    key={`checker-${section.title}-${item.id}`}
+                                    value={item.assignedTo || ""}
+                                    onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
+                                  >
+                                    <SelectTrigger 
+                                      className="w-full h-10 text-xs transition-all duration-150 border"
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
+                                      <SelectValue placeholder="Select checker" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {Object.entries(personnelGroups)
+                                        .filter(([group]) => group === "REGULARS")
+                                        .map(([group, members]) => (
+                                        <React.Fragment key={group}>
+                                          <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group}</div>
+                                          {members && members.length > 0 ? members.map((checker) => (
+                                            <SelectItem key={checker} value={checker} className="text-xs py-1">
+                                              {checker}
+                                            </SelectItem>
+                                          )) : (
+                                            <div className="px-2 py-1.5 text-xs text-muted-foreground/70">No personnel available</div>
+                                          )}
+                                        </React.Fragment>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   <Button
@@ -2104,6 +2156,77 @@ export default function EquipmentChecklistPage() {
                       ))}
                     </div>
                   )}
+
+                  {section.title === "VEHICLE LPT" && (
+                    <div className="border-t border-gray-200 dark:border-gray-800">
+                      <div className="grid grid-cols-12 px-3 py-1.5 bg-gray-50 dark:bg-neutral-800/50 text-[10px] font-medium text-muted-foreground">
+                        <div className="col-span-4 truncate pr-1">Vehicle</div>
+                        <div className="col-span-6 truncate pr-1">
+                          <span className="pl-3">Checker</span>
+                        </div>
+                        <div className="col-span-2 text-center truncate">Status</div>
+                      </div>
+                      {section.items.map((item, itemIndex) => (
+                        <SwipeableRow
+                          key={item.id}
+                          onEdit={() => handleEditItem(sectionIndex, itemIndex)}
+                          onClear={() => handleClearItem(sectionIndex, itemIndex)}
+                          isChecked={item.checked}
+                        >
+                          <div className={cn(
+                            "border-t border-gray-100 dark:border-gray-800 first:border-t-0",
+                            item.checked ? "bg-muted/40 dark:bg-muted/30" : ""
+                          )}>
+                            <div className="px-3 py-2">
+                              <div className="grid grid-cols-12 items-center gap-2">
+                                <div className="col-span-4 text-xs font-medium text-neutral-700 dark:text-neutral-300 truncate">
+                                  {item.name}
+                                </div>
+                                <div className="col-span-6">
+                                  <Select
+                                    value={item.assignedTo || ""}
+                                    onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
+                                  >
+                                    <SelectTrigger
+                                      className="w-full h-7 text-xs min-h-0 py-0 px-2"
+                                      aria-label={`Select checker for ${item.name}`}
+                                    >
+                                      <SelectValue placeholder="Select checker" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {Object.entries(personnelGroups)
+                                        .filter(([group]) => group === "REGULARS")
+                                        .map(([group, members]) => (
+                                          <React.Fragment key={group}>
+                                            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group}</div>
+                                            {members && members.length > 0 ? members.map((checker) => (
+                                              <SelectItem key={checker} value={checker} className="text-xs py-1">
+                                                {checker}
+                                              </SelectItem>
+                                            )) : (
+                                              <div className="px-2 py-1.5 text-xs text-muted-foreground/70">No personnel available</div>
+                                            )}
+                                          </React.Fragment>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div className="col-span-2 flex justify-center">
+                                  <Checkbox
+                                    id={`${section.title}-${item.id}-mobile`}
+                                    checked={item.checked}
+                                    onCheckedChange={(checked) =>
+                                      handleCheckboxChange(sectionIndex, itemIndex, checked as boolean)
+                                    }
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </SwipeableRow>
+                      ))}
+                    </div>
+                  )}
                   
                   {section.title === "BWC" && (
                     <div className="border-t border-gray-200 dark:border-gray-800">
@@ -2177,7 +2300,7 @@ export default function EquipmentChecklistPage() {
                     </div>
                   )}
                   
-                  {isVehicleSection(section.title) && (
+                  {isVehicleFptSection(section.title) && (
                     <div className="border-t border-gray-200 dark:border-gray-800">
                       {section.items.map((item, itemIndex) => (
                         <SwipeableRow
@@ -2225,81 +2348,118 @@ export default function EquipmentChecklistPage() {
                               </div>
                             </div>
 
-                            {/* Bottom Row: Checker, Fuel, ID */}
-                            <div className="px-3 py-2">
-                              <div className="grid grid-cols-3 gap-2">
-                                <div>
-                                  <Select
-                                    key={`mobile-checker-${section.title}-${item.id}`}
-                                    value={item.assignedTo || ""}
-                                    onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
-                                  >
-                                    <SelectTrigger 
-                                      className="w-full h-7 text-xs min-h-0 py-0 px-2" 
-                                      aria-label={`Select checker for ${item.name}`}
+                            {/* Bottom Row */}
+                            {isVehicleFptSection(section.title) ? (
+                              <div className="px-3 py-2">
+                                <div className="grid grid-cols-3 gap-2">
+                                  <div>
+                                    <Select
+                                      key={`mobile-checker-${section.title}-${item.id}`}
+                                      value={item.assignedTo || ""}
+                                      onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
                                     >
-                                      <SelectValue placeholder="Checker" className="truncate" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {Object.entries(personnelGroups)
-                                        .filter(([group]) => group === "REGULARS")
-                                        .map(([group, members]) => (
-                                          <React.Fragment key={group}>
-                                            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group}</div>
-                                            {members && members.length > 0 ? members.map((checker) => (
-                                              <SelectItem key={checker} value={checker} className="text-xs py-1">
-                                                {checker}
-                                              </SelectItem>
-                                            )) : (
-                                              <div className="px-2 py-1.5 text-xs text-muted-foreground/70">No personnel available</div>
-                                            )}
-                                          </React.Fragment>
+                                      <SelectTrigger 
+                                        className="w-full h-7 text-xs min-h-0 py-0 px-2" 
+                                        aria-label={`Select checker for ${item.name}`}
+                                      >
+                                        <SelectValue placeholder="Checker" className="truncate" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {Object.entries(personnelGroups)
+                                          .filter(([group]) => group === "REGULARS")
+                                          .map(([group, members]) => (
+                                            <React.Fragment key={group}>
+                                              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group}</div>
+                                              {members && members.length > 0 ? members.map((checker) => (
+                                                <SelectItem key={checker} value={checker} className="text-xs py-1">
+                                                  {checker}
+                                                </SelectItem>
+                                              )) : (
+                                                <div className="px-2 py-1.5 text-xs text-muted-foreground/70">No personnel available</div>
+                                              )}
+                                            </React.Fragment>
+                                          ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+
+                                  <div>
+                                    <Select
+                                      key={`mobile-fuel-${section.title}-${item.id}`}
+                                      value={item.status || ""}
+                                      onValueChange={(value) => handleStatusChange(sectionIndex, itemIndex, value)}
+                                    >
+                                      <SelectTrigger className={cn(
+                                        "w-full h-7 text-xs min-h-0 py-0 px-2",
+                                        item.assignedTo && (item.status === "Pending" || !item.status) &&
+                                        "border-amber-400 bg-amber-50 dark:bg-amber-900/20 animate-pulse-medium"
+                                      )}>
+                                        <SelectValue placeholder="Fuel Level" className="truncate" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {fuelLevels.map((level) => (
+                                          <SelectItem key={level} value={level} className="text-xs py-1">
+                                            {level}
+                                          </SelectItem>
                                         ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
 
-                                <div>
-                                  <Select
-                                    key={`mobile-fuel-${section.title}-${item.id}`}
-                                    value={item.status || ""}
-                                    onValueChange={(value) => handleStatusChange(sectionIndex, itemIndex, value)}
-                                  >
-                                    <SelectTrigger className={cn(
-                                      "w-full h-7 text-xs min-h-0 py-0 px-2",
-                                      item.assignedTo && (item.status === "Pending" || !item.status) &&
-                                      "border-amber-400 bg-amber-50 dark:bg-amber-900/20 animate-pulse-medium"
-                                    )}>
-                                      <SelectValue placeholder="Fuel Level" className="truncate" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {fuelLevels.map((level) => (
-                                        <SelectItem key={level} value={level} className="text-xs py-1">
-                                          {level}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-
-                                <div>
-                                  <Input
-                                    key={`mobile-id-${section.title}-${item.id}`}
-                                    ref={(el) => { inputRefs.current[`${sectionIndex}-${itemIndex}`] = el; }}
-                                    value={localIdentifiers[`${sectionIndex}-${itemIndex}`] ?? item.identifier ?? ""}
-                                    onChange={(e) => handleIdentifierChange(sectionIndex, itemIndex, e.target.value)}
-                                    onBlur={() => handleInputBlur(sectionIndex, itemIndex)}
-                                    placeholder="Enter ID"
-                                    className={cn(
-                                      "w-full h-7 text-xs min-h-0 py-0 px-2",
-                                      item.assignedTo && !item.identifier && !localIdentifiers[`${sectionIndex}-${itemIndex}`] &&
-                                      "border-amber-400 bg-amber-50 dark:bg-amber-900/20 animate-pulse-medium",
-                                      animateInputs[`${sectionIndex}-${itemIndex}`] && "shadow-md scale-[1.02] border-amber-400"
-                                    )}
-                                  />
+                                  <div>
+                                    <Input
+                                      key={`mobile-id-${section.title}-${item.id}`}
+                                      ref={(el) => { inputRefs.current[`${sectionIndex}-${itemIndex}`] = el; }}
+                                      value={localIdentifiers[`${sectionIndex}-${itemIndex}`] ?? item.identifier ?? ""}
+                                      onChange={(e) => handleIdentifierChange(sectionIndex, itemIndex, e.target.value)}
+                                      onBlur={() => handleInputBlur(sectionIndex, itemIndex)}
+                                      placeholder="Enter ID"
+                                      className={cn(
+                                        "w-full h-7 text-xs min-h-0 py-0 px-2",
+                                        item.assignedTo && !item.identifier && !localIdentifiers[`${sectionIndex}-${itemIndex}`] &&
+                                        "border-amber-400 bg-amber-50 dark:bg-amber-900/20 animate-pulse-medium",
+                                        animateInputs[`${sectionIndex}-${itemIndex}`] && "shadow-md scale-[1.02] border-amber-400"
+                                      )}
+                                    />
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            ) : isVehicleArmourySection(section.title) ? (
+                              <div className="px-3 py-2">
+                                <div className="grid grid-cols-1 gap-2">
+                                  <div>
+                                    <Select
+                                      key={`mobile-checker-${section.title}-${item.id}`}
+                                      value={item.assignedTo || ""}
+                                      onValueChange={(value) => handleCheckerChange(sectionIndex, itemIndex, value)}
+                                    >
+                                      <SelectTrigger 
+                                        className="w-full h-7 text-xs min-h-0 py-0 px-2" 
+                                        aria-label={`Select checker for ${item.name}`}
+                                      >
+                                        <SelectValue placeholder="Checker" className="truncate" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {Object.entries(personnelGroups)
+                                          .filter(([group]) => group === "REGULARS")
+                                          .map(([group, members]) => (
+                                            <React.Fragment key={group}>
+                                              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{group}</div>
+                                              {members && members.length > 0 ? members.map((checker) => (
+                                                <SelectItem key={checker} value={checker} className="text-xs py-1">
+                                                  {checker}
+                                                </SelectItem>
+                                              )) : (
+                                                <div className="px-2 py-1.5 text-xs text-muted-foreground/70">No personnel available</div>
+                                              )}
+                                            </React.Fragment>
+                                          ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
                         </SwipeableRow>
                       ))}
