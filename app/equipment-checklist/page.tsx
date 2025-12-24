@@ -409,17 +409,6 @@ export default function EquipmentChecklistPage() {
       ]
     },
     {
-      title: "VEHICLE LPT",
-      items: [
-        { id: 1, name: "CFS FRC (QX1859E)", checked: false },
-        { id: 2, name: "Class 4 Truck (YN4304C)", checked: false },
-        { id: 3, name: "LF811 (GBF8661J)", checked: false },
-        { id: 4, name: "LF812 (GBD6351C)", checked: false },
-        { id: 5, name: "Admin FRC (QX1034T)", checked: false },
-        { id: 6, name: "Spare LF (GBD7755P)", checked: false },
-      ]
-    },
-    {
       title: "BWC",
       items: [
         { id: 1, name: "G0247 8417", checked: false },
@@ -459,14 +448,6 @@ export default function EquipmentChecklistPage() {
           { id: 4, name: "LF812 (GBD6351C)", checked: false },
           { id: 5, name: "Admin FRC (QX1034T)", checked: false },
           { id: 6, name: "Spare LF (GBF8661J)", checked: false },
-        ],
-        "VEHICLE LPT": [
-          { id: 1, name: "CFS FRC (QX1859E)", checked: false },
-          { id: 2, name: "Class 4 Truck (YN4304C)", checked: false },
-          { id: 3, name: "LF811 (GBF8661J)", checked: false },
-          { id: 4, name: "LF812 (GBD6351C)", checked: false },
-          { id: 5, name: "Admin FRC (QX1034T)", checked: false },
-          { id: 6, name: "Spare LF (GBD7755P)", checked: false },
         ],
         "BWC": [
           { id: 1, name: "G0247 8417", checked: false },
@@ -516,7 +497,7 @@ export default function EquipmentChecklistPage() {
       
       // Sort sections in the desired order
       newSections.sort((a, b) => {
-        const order = ['ARMOURY', 'VEHICLE FPT', 'VEHICLE LPT', 'BWC'];
+        const order = ['ARMOURY', 'VEHICLE FPT', 'BWC'];
         return order.indexOf(a.title) - order.indexOf(b.title);
       });
       
@@ -654,10 +635,11 @@ export default function EquipmentChecklistPage() {
         return;
       }
       
-      // Organize data into sections
+      // Organize data into sections (UI intentionally hides VEHICLE LPT / Last Parade)
       const groupedBySection: Record<string, ChecklistItem[]> = {};
       
       data.forEach(item => {
+        if (item.section === 'VEHICLE LPT') return;
         if (!groupedBySection[item.section]) {
           groupedBySection[item.section] = [];
         }
@@ -675,7 +657,7 @@ export default function EquipmentChecklistPage() {
       });
       
       // Create sections array in the preferred order
-      const sectionOrder = ["ARMOURY", "VEHICLE FPT", "VEHICLE LPT", "BWC"];
+      const sectionOrder = ["ARMOURY", "VEHICLE FPT", "BWC"];
       const newSections: ChecklistSection[] = sectionOrder.map(title => ({
         title,
         items: groupedBySection[title] || []
@@ -697,7 +679,6 @@ export default function EquipmentChecklistPage() {
       if (process.env.NODE_ENV === 'development') {
         console.log('Sections state updated: ', newSections);
         console.log('Vehicle FPT items: ', newSections.find(s => s.title === "VEHICLE FPT")?.items);
-        console.log('Vehicle LPT items: ', newSections.find(s => s.title === "VEHICLE LPT")?.items);
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1105,7 +1086,8 @@ export default function EquipmentChecklistPage() {
   };
 
   const isVehicleSection = (title: string) => {
-    return title === "VEHICLE FPT" || title === "VEHICLE LPT";
+    // UI hides VEHICLE LPT / Last Parade. Only treat FPT as "vehicle section" in the UI.
+    return title === "VEHICLE FPT";
   };
 
   const handleRefresh = async () => {
@@ -1380,7 +1362,8 @@ export default function EquipmentChecklistPage() {
     try {
       setIsSaving(true);
       
-      // For vehicle sections, update both FPT and LPT
+      // For vehicle sections, update both FPT and LPT in DB to keep them in sync,
+      // even though LPT is hidden in the UI.
       if (isVehicle) {
         const updates = [
           {

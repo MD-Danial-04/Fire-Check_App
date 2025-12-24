@@ -138,12 +138,6 @@ export default function Dashboard() {
       inProgress: 0,
       pending: 0
     },
-    vehicleLPT: {
-      total: 0,
-      completed: 0,
-      inProgress: 0,
-      pending: 0
-    },
     bwc: {
       total: 0,
       completed: 0,
@@ -160,16 +154,14 @@ export default function Dashboard() {
   const [ppeStatusView, setPpeStatusView] = useState<'completed' | 'pending' | 'none'>('none')
   const [completedPersonnel, setCompletedPersonnel] = useState<PendingItemProps[]>([])
   // Add new state for equipment sections
-  const [equipmentSectionView, setEquipmentSectionView] = useState<'armoury' | 'vehicleFPT' | 'vehicleLPT' | 'bwc' | 'none'>('none')
+  const [equipmentSectionView, setEquipmentSectionView] = useState<'armoury' | 'vehicleFPT' | 'bwc' | 'none'>('none')
   const [equipmentSectionItems, setEquipmentSectionItems] = useState<{
     armoury: { completed: PendingItemProps[], pending: PendingItemProps[] },
     vehicleFPT: { completed: PendingItemProps[], pending: PendingItemProps[] },
-    vehicleLPT: { completed: PendingItemProps[], pending: PendingItemProps[] },
     bwc: { completed: PendingItemProps[], pending: PendingItemProps[] }
   }>({
     armoury: { completed: [], pending: [] },
     vehicleFPT: { completed: [], pending: [] },
-    vehicleLPT: { completed: [], pending: [] },
     bwc: { completed: [], pending: [] }
   })
 
@@ -426,7 +418,6 @@ export default function Dashboard() {
         const sections = {
           armoury: checklistData?.filter(item => item.section.toUpperCase() === 'ARMOURY') || [],
           vehicleFPT: checklistData?.filter(item => item.section.toUpperCase() === 'VEHICLE FPT') || [],
-          vehicleLPT: checklistData?.filter(item => item.section.toUpperCase() === 'VEHICLE LPT') || [],
           bwc: checklistData?.filter(item => item.section.toUpperCase() === 'BWC') || []
         };
 
@@ -467,7 +458,6 @@ export default function Dashboard() {
         const progress = {
           armoury: calculateSectionProgress(sections.armoury),
           vehicleFPT: calculateSectionProgress(sections.vehicleFPT),
-          vehicleLPT: calculateSectionProgress(sections.vehicleLPT),
           // Special handling for BWC
           bwc: calculateBwcProgress(sections.bwc, assignedBwcs, uniquePersonnel, bwcRequiredPersonnel)
         };
@@ -508,23 +498,6 @@ export default function Dashboard() {
               .map(item => ({
                 name: item.name,
                 section: 'Vehicle FPT',
-                type: 'equipment' as const
-              }))
-          },
-          vehicleLPT: {
-            completed: sections.vehicleLPT
-              .filter(item => item.checked)
-              .map(item => ({
-                name: item.name,
-                section: 'Vehicle LPT',
-                type: 'equipment' as const,
-                assignedTo: item.assigned_to
-              })),
-            pending: sections.vehicleLPT
-              .filter(item => !item.checked)
-              .map(item => ({
-                name: item.name,
-                section: 'Vehicle LPT',
                 type: 'equipment' as const
               }))
           },
@@ -574,17 +547,6 @@ export default function Dashboard() {
             pendingEquipment.push({
               name: item.name,
               section: 'Vehicle FPT',
-              type: 'equipment'
-            });
-          });
-          
-        // Add pending vehicle LPT items
-        sections.vehicleLPT
-          .filter(item => !item.checked)
-          .forEach(item => {
-            pendingEquipment.push({
-              name: item.name,
-              section: 'Vehicle LPT',
               type: 'equipment'
             });
           });
@@ -860,32 +822,26 @@ export default function Dashboard() {
               value={`${
                 equipmentProgress.armoury.completed + 
                 equipmentProgress.vehicleFPT.completed + 
-                equipmentProgress.vehicleLPT.completed + 
                 equipmentProgress.bwc.completed
               }/${
                 equipmentProgress.armoury.total + 
                 equipmentProgress.vehicleFPT.total + 
-                equipmentProgress.vehicleLPT.total + 
                 equipmentProgress.bwc.total
               }`}
               change={`${calculateProgress(
                 equipmentProgress.armoury.completed + 
                 equipmentProgress.vehicleFPT.completed + 
-                equipmentProgress.vehicleLPT.completed + 
                 equipmentProgress.bwc.completed,
                 equipmentProgress.armoury.total + 
                 equipmentProgress.vehicleFPT.total + 
-                equipmentProgress.vehicleLPT.total + 
                 equipmentProgress.bwc.total
               )}% complete`}
               progress={calculateProgress(
                 equipmentProgress.armoury.completed + 
                 equipmentProgress.vehicleFPT.completed + 
-                equipmentProgress.vehicleLPT.completed + 
                 equipmentProgress.bwc.completed,
                 equipmentProgress.armoury.total + 
                 equipmentProgress.vehicleFPT.total + 
-                equipmentProgress.vehicleLPT.total + 
                 equipmentProgress.bwc.total
               )}
             />
@@ -895,7 +851,6 @@ export default function Dashboard() {
                 ppeProgress.pending + 
                 equipmentProgress.armoury.pending + 
                 equipmentProgress.vehicleFPT.pending + 
-                equipmentProgress.vehicleLPT.pending + 
                 equipmentProgress.bwc.pending
               }`}
               change="Needs attention"
@@ -1045,67 +1000,6 @@ export default function Dashboard() {
                             {equipmentSectionItems.vehicleFPT.pending.length > 0 ? (
                               equipmentSectionItems.vehicleFPT.pending.map((item, index) => (
                                 <div key={`vehicleFPT-pending-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
-                                  <div className="flex items-center">
-                                    <div className="h-2 w-2 rounded-full mr-2 bg-red-500" aria-hidden="true"></div>
-                                    <div className="text-sm">{item.name}</div>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="text-sm text-gray-500 dark:text-neutral-400">No pending items</div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  <ProgressSection
-                    title="Vehicle LPT"
-                    total={equipmentProgress.vehicleLPT.total}
-                    completed={equipmentProgress.vehicleLPT.completed}
-                    inProgress={0}
-                    pending={equipmentProgress.vehicleLPT.pending}
-                    sectionKey="vehicleLPT"
-                    isSelected={equipmentSectionView === 'vehicleLPT'}
-                    onSectionClick={(section) => setEquipmentSectionView(equipmentSectionView === section ? 'none' : section)}
-                  />
-                  {equipmentSectionView === 'vehicleLPT' && (
-                    <div className="mt-2 border-t border-gray-200 dark:border-neutral-700 pt-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
-                            Completed Items ({equipmentSectionItems.vehicleLPT.completed.length})
-                          </h4>
-                          <div className="space-y-2">
-                            {equipmentSectionItems.vehicleLPT.completed.length > 0 ? (
-                              equipmentSectionItems.vehicleLPT.completed.map((item, index) => (
-                                <div key={`vehicleLPT-completed-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
-                                  <div className="flex flex-col">
-                                    <div className="flex items-center">
-                                      <div className="h-2 w-2 rounded-full mr-2 bg-green-500" aria-hidden="true"></div>
-                                      <div className="text-sm font-medium">{item.name}</div>
-                                    </div>
-                                    {item.assignedTo && (
-                                      <div className="mt-1 ml-4 text-xs text-neutral-500 dark:text-neutral-400">
-                                        Assigned to: {item.assignedTo}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="text-sm text-gray-500 dark:text-neutral-400">No completed items</div>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-700 dark:text-neutral-300 mb-2">
-                            Pending Items ({equipmentSectionItems.vehicleLPT.pending.length})
-                          </h4>
-                          <div className="space-y-2">
-                            {equipmentSectionItems.vehicleLPT.pending.length > 0 ? (
-                              equipmentSectionItems.vehicleLPT.pending.map((item, index) => (
-                                <div key={`vehicleLPT-pending-${index}`} className="border border-gray-200 dark:border-neutral-700 rounded-md dark:bg-neutral-700 p-2">
                                   <div className="flex items-center">
                                     <div className="h-2 w-2 rounded-full mr-2 bg-red-500" aria-hidden="true"></div>
                                     <div className="text-sm">{item.name}</div>
@@ -1434,10 +1328,10 @@ interface ProgressSectionProps {
   completed: number;
   inProgress: number;
   pending: number;
-  sectionKey?: 'armoury' | 'vehicleFPT' | 'vehicleLPT' | 'bwc';
+  sectionKey?: 'armoury' | 'vehicleFPT' | 'bwc';
   isSelected?: boolean;
   customDescription?: string;
-  onSectionClick?: (section: 'armoury' | 'vehicleFPT' | 'vehicleLPT' | 'bwc') => void;
+  onSectionClick?: (section: 'armoury' | 'vehicleFPT' | 'bwc') => void;
 }
 
 const ProgressSection = ({ 
