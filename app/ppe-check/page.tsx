@@ -224,10 +224,11 @@ function PPECheckClient() {
         'WO': 3,
         'WO2': 3,  // Same level as WO
         'WO1': 4,
-        'SGT3': 5,
-        'SGT2': 6,
-        'SGT1': 7,
-        'SGT': 8
+        'SSG': 5,
+        'SGT3': 6,
+        'SGT2': 7,
+        'SGT1': 8,
+        'SGT': 9
       },
       'NS SECTION COMMANDER': {
         'SGT': 1,

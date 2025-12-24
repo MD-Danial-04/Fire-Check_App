@@ -225,13 +225,14 @@ export default function EquipmentChecklistPage() {
             'LTA': 2,
             'WO2': 3,
             'WO1': 4,
-            'SGT3': 5,
-            'SGT2': 6,
+            'SSG': 5,
+            'SGT3': 6,
+            'SGT2': 7,
             // Firefighters
-            'SGT1': 7,
-            'SGT': 8,
-            'CPL': 9,
-            'LCP': 10
+            'SGT1': 8,
+            'SGT': 9,
+            'CPL': 10,
+            'LCP': 11
           };
           return rankOrder[rank] || 999; // Default high number for unknown ranks
         };
