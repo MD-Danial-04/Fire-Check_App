@@ -81,6 +81,8 @@ interface GroupedPersonnel {
   vessel_cylinder: string | null;
   lfav_backplate: string | null;
   lfav_cylinder: string | null;
+  vessel_telemetry_id: string | null;
+  lfav_telemetry_id: string | null;
   vessel_ba_set: string | null;  // For vessel BA sets (SET 1, SET 2, etc.)
   lfav_ba_set: string | null;    // For LFAV BA sets (SC, FF1, PO, etc.)
 }
@@ -409,6 +411,8 @@ function PPECheckClient() {
                 vessel_cylinder: null,
                 lfav_backplate: null,
                 lfav_cylinder: null,
+                vessel_telemetry_id: null,
+                lfav_telemetry_id: null,
                 vessel_ba_set: null,
                 lfav_ba_set: null
               };
@@ -418,6 +422,8 @@ function PPECheckClient() {
             acc[name].vessel_cylinder = curr.vessel_cylinder || acc[name].vessel_cylinder;
             acc[name].lfav_backplate = curr.lfav_backplate || acc[name].lfav_backplate;
             acc[name].lfav_cylinder = curr.lfav_cylinder || acc[name].lfav_cylinder;
+            acc[name].vessel_telemetry_id = curr.vessel_telemetry_id || acc[name].vessel_telemetry_id;
+            acc[name].lfav_telemetry_id = curr.lfav_telemetry_id || acc[name].lfav_telemetry_id;
             
             // Split BA set assignment based on type
             if (curr.ba_set_number) {
@@ -768,8 +774,10 @@ function PPECheckClient() {
     person.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (person.vessel_backplate?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     (person.vessel_cylinder?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (person.vessel_telemetry_id?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
     (person.lfav_backplate?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (person.lfav_cylinder?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+    (person.lfav_cylinder?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (person.lfav_telemetry_id?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
   // Map the groupings to our standard categories
@@ -1313,48 +1321,60 @@ function PPECheckClient() {
                         {
                           key: "name",
                           header: "Name",
-                          className: "w-[20%]"
+                          className: "w-[14%]"
                         },
                         {
                           key: "vessel_backplate",
                           header: "Vessel Backplate",
-                          className: "w-[12%]",
+                          className: "w-[10%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "vessel_cylinder",
                           header: "Vessel Cylinder",
-                          className: "w-[12%]",
+                          className: "w-[10%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "vessel_ba_set",
                           header: "Vessel Set",
-                          className: "w-[8%]",
+                          className: "w-[7%]",
+                          render: (value) => value || '-'
+                        },
+                        {
+                          key: "vessel_telemetry_id",
+                          header: "Vessel Telemetry",
+                          className: "w-[9%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "lfav_backplate",
                           header: "LFAV Backplate",
-                          className: "w-[12%]",
+                          className: "w-[10%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "lfav_cylinder",
                           header: "LFAV Cylinder",
-                          className: "w-[12%]",
+                          className: "w-[10%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "lfav_ba_set",
                           header: "LFAV Set",
-                          className: "w-[8%]",
+                          className: "w-[7%]",
+                          render: (value) => value || '-'
+                        },
+                        {
+                          key: "lfav_telemetry_id",
+                          header: "LFAV Telemetry",
+                          className: "w-[9%]",
                           render: (value) => value || '-'
                         },
                         {
                           key: "actions",
                           header: "Actions",
-                          className: "w-[16%]",
+                          className: "w-[14%]",
                           render: (_, person) => (
                             <div className="flex flex-row gap-2">
                               <Button
@@ -1423,7 +1443,7 @@ function PPECheckClient() {
                             <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
                               Vessel Equipment
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                               <div>
                                 <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
                                   Backplate
@@ -1448,6 +1468,14 @@ function PPECheckClient() {
                                   {person.vessel_ba_set || '-'}
                                 </div>
                               </div>
+                              <div>
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                  Telemetry
+                                </div>
+                                <div className="font-medium text-sm whitespace-nowrap overflow-x-auto">
+                                  {person.vessel_telemetry_id || '-'}
+                                </div>
+                              </div>
                             </div>
                           </div>
                           
@@ -1456,7 +1484,7 @@ function PPECheckClient() {
                             <div className="text-xs font-medium text-neutral-500 dark:text-neutral-400 mb-2">
                               LFAV Equipment
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                               <div>
                                 <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
                                   Backplate
@@ -1479,6 +1507,14 @@ function PPECheckClient() {
                                 </div>
                                 <div className="font-medium text-sm whitespace-nowrap overflow-x-auto">
                                   {person.lfav_ba_set || '-'}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-neutral-500 dark:text-neutral-400 mb-1.5">
+                                  Telemetry
+                                </div>
+                                <div className="font-medium text-sm whitespace-nowrap overflow-x-auto">
+                                  {person.lfav_telemetry_id || '-'}
                                 </div>
                               </div>
                             </div>
