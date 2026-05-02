@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useCallback, useRef } from 'react'
 import React from 'react'
-import { Search, ExternalLink, Copy, Plus, Clipboard, FileCheck, Smartphone, Bookmark, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Search, ExternalLink, Copy, Clipboard, FileCheck, Smartphone, Bookmark, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -20,11 +20,15 @@ import { ResponsiveTable } from "@/components/ui/responsive-table"
 import { DialogFooter } from "@/components/ui/dialog"
 import Link from 'next/link'
 import { RealtimeChannel } from '@supabase/supabase-js';
-import { cn } from "@/lib/utils"
 import BookmarkletInstructions from '@/components/BookmarkLetInstructions';
+import { cn } from "@/lib/utils"
 import { useSearchParams } from 'next/navigation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getSupabaseClient, cleanupAllChannels, retryWithExponentialBackoff, trackChannel, untrackChannel, resetSupabaseClient } from '@/lib/supabase-client';
+
+/** Dräger portal (OAuth); opens in a new tab from each row’s actions. */
+const DRAEGER_PORTAL_URL =
+  'https://login.draeger.com/oauth2/default/v1/authorize?client_id=0oaol7hu6zdk5YrWF417&code_challenge=NbN0-1kX3Z0w0l_PzB7znRIRfUEWq4Q0KPeZcnDgSY4&code_challenge_method=S256&nonce=aZj1EuI2sc02oqybSq4PDE8gpeKB0dCr4QJigtOdl0M4xJIfrlLFLgzYUDa7r4Yq&redirect_uri=https%3A%2F%2Fsc-apac.draeger.com&response_type=code&state=DoPArg0sJRdVxIVCbxfa4aPO5DjWVZPc63s361D820JTROkXhIjLXGqXP4Z6CFxl&scope=openid%20profile%20email%20offline_access'
 
 // Add helper function before the component
 function normalizePersonnelName(name: string): string {
@@ -128,13 +132,8 @@ function PPECheckClient() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [prefilledUrl, setPrefilledUrl] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<GroupedPersonnel | null>(null);
-  const [responseId, setResponseId] = useState('');
-  const [isResponseIdDialogOpen, setIsResponseIdDialogOpen] = useState(false);
   const { toast } = useToast();
   const [submittedResponses, setSubmittedResponses] = useState<Record<string, string>>({});
-  const [viewingResponseId, setViewingResponseId] = useState<string | null>(null);
-  const [viewingPersonName, setViewingPersonName] = useState<string | null>(null);
-  const [submittedId, setSubmittedId] = useState<string | null>(null);
   const [tempResponseId, setTempResponseId] = useState<string | null>(null);
   const [tempPersonName, setTempPersonName] = useState<string | null>(null);
   const [showPersonSelectionDialog, setShowPersonSelectionDialog] = useState(false);
@@ -958,81 +957,6 @@ function PPECheckClient() {
     }
   };
 
-  const handleSubmitResponseId = async () => {
-    if (!selectedPerson) {
-      toast({
-        title: "Error",
-        description: "No personnel selected",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setIsResponseIdDialogOpen(true);
-  };
-  
-  const saveResponseId = async (personName = selectedPerson?.name, id = responseId) => {
-    if (!id || !personName) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid response ID",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    try {
-      const { data, error } = await supabase
-        .from('form_responses')
-        .insert({
-          personnel_name: personName,
-          response_id: id,
-          form_type: 'ppe_check',
-          submitted_at: new Date().toISOString()
-        })
-        .select();
-        
-      if (error) {
-        console.error('Error saving response ID:', error);
-        toast({
-          title: "Error",
-          description: error.message || "Failed to save response ID",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Update local state
-      setSubmittedResponses(prev => ({
-        ...prev,
-        [personName]: id
-      }));
-      
-      // Set the submitted ID to show the dialog
-      setSubmittedId(id);
-      
-      toast({
-        title: "Success",
-        description: "Response ID saved successfully",
-      });
-      
-      setResponseId('');
-      setIsResponseIdDialogOpen(false);
-    } catch (error) {
-      console.error('Error in saveResponseId function:', error);
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to save response ID",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleViewResponseId = (name: string, responseId: string) => {
-    setViewingPersonName(name);
-    setViewingResponseId(responseId);
-  };
-
   const handleResetResponseId = async () => {
     try {
       console.log('Starting reset operation...');
@@ -1099,10 +1023,6 @@ function PPECheckClient() {
           description: "All response IDs have been reset",
         });
       }
-      
-      // Clear the response ID and submitted ID
-      setResponseId('');
-      setSubmittedId(null);
       
       // Force a refetch of submitted responses to ensure UI is in sync with database
       console.log('Refetching submitted responses...');
@@ -1376,45 +1296,39 @@ function PPECheckClient() {
                           header: "Actions",
                           className: "w-[14%]",
                           render: (_, person) => (
-                            <div className="flex flex-row gap-2">
+                            <div className="flex flex-row flex-wrap gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleFormFill(person)}
-                                className="whitespace-nowrap"
-                              >
-                                <Copy className="h-4 w-4 mr-2" />
-                                Fill Form
-                              </Button>
-                              <Button
-                                variant={submittedResponses[person.name] ? "outline" : "default"}
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedPerson(person);
-                                  if (submittedResponses[person.name]) {
-                                    handleViewResponseId(person.name, submittedResponses[person.name]);
-                                  } else {
-                                    handleSubmitResponseId();
-                                  }
-                                }}
                                 className={cn(
                                   "whitespace-nowrap",
-                                  submittedResponses[person.name] 
-                                    ? "border-blue-500 text-blue-500 hover:bg-blue-50"
-                                    : "bg-green-600 hover:bg-green-700 text-white"
+                                  submittedResponses[person.name] &&
+                                    "border-blue-500 text-blue-500 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-950/40"
                                 )}
                               >
                                 {submittedResponses[person.name] ? (
                                   <>
                                     <FileCheck className="h-4 w-4 mr-2" />
-                                    View ID
+                                    Completed
                                   </>
                                 ) : (
                                   <>
-                                    <Plus className="h-4 w-4 mr-2" />
-                                    Submit ID
+                                    <Copy className="h-4 w-4 mr-2" />
+                                    Fill Form
                                   </>
                                 )}
+                              </Button>
+                              <Button variant="outline" size="sm" asChild>
+                                <a
+                                  href={DRAEGER_PORTAL_URL}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="whitespace-nowrap"
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  draeger
+                                </a>
                               </Button>
                             </div>
                           )
@@ -1528,41 +1442,34 @@ function PPECheckClient() {
                               variant="outline"
                               size="lg"
                               onClick={() => handleFormFill(person)}
-                              className="h-12 w-full touch-manipulation"
-                            >
-                              <Copy className="h-4 w-4 mr-2" />
-                              Fill Form
-                            </Button>
-                            
-                            <Button
-                              variant={submittedResponses[person.name] ? "outline" : "default"}
-                              size="lg"
-                              onClick={() => {
-                                setSelectedPerson(person);
-                                if (submittedResponses[person.name]) {
-                                  handleViewResponseId(person.name, submittedResponses[person.name]);
-                                } else {
-                                  handleSubmitResponseId();
-                                }
-                              }}
                               className={cn(
-                                "h-12 w-full touch-manipulation relative z-10",
-                                submittedResponses[person.name]
-                                  ? "border-blue-500 text-blue-500 hover:bg-blue-50"
-                                  : "bg-green-600 hover:bg-green-700 text-white"
+                                "h-12 w-full touch-manipulation",
+                                submittedResponses[person.name] &&
+                                  "border-blue-500 text-blue-500 hover:bg-blue-50 dark:border-blue-400 dark:text-blue-400 dark:hover:bg-blue-950/40"
                               )}
                             >
                               {submittedResponses[person.name] ? (
                                 <>
                                   <FileCheck className="h-4 w-4 mr-2" />
-                                  View ID
+                                  Completed
                                 </>
                               ) : (
                                 <>
-                                  <Plus className="h-4 w-4 mr-2" />
-                                  Submit ID
+                                  <Copy className="h-4 w-4 mr-2" />
+                                  Fill Form
                                 </>
                               )}
+                            </Button>
+                            <Button variant="outline" size="lg" asChild>
+                              <a
+                                href={DRAEGER_PORTAL_URL}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="h-12 w-full touch-manipulation inline-flex items-center justify-center"
+                              >
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                draeger
+                              </a>
                             </Button>
                           </div>
                         </div>
@@ -1622,89 +1529,6 @@ function PPECheckClient() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        
-        {/* Dialog for response ID */}
-        <Dialog open={isResponseIdDialogOpen} onOpenChange={setIsResponseIdDialogOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Submit Response ID</DialogTitle>
-              <DialogDescription>
-                Enter the form response ID for {selectedPerson?.name}. This ID can be found at the end of the form submission confirmation page.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-2">
-              <div className="space-y-2">
-                <label htmlFor="response-id" className="text-sm font-medium">
-                  Response ID
-                </label>
-                <Input
-                  id="response-id"
-                  placeholder="e.g., 65031149356d470012810f7f"
-                  value={responseId}
-                  onChange={(e) => setResponseId(e.target.value)}
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground">
-                  The response ID is a unique identifier for the form submission.
-                </p>
-          </div>
-        </div>
-            <DialogFooter className="mt-4">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setIsResponseIdDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                onClick={() => saveResponseId()}
-                disabled={!responseId}
-              >
-                Save
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Dialog for viewing response ID */}
-        <Dialog open={!!viewingResponseId} onOpenChange={(open) => !open && setViewingResponseId(null)}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Submitted Response ID</DialogTitle>
-              <DialogDescription>
-                Response ID for {viewingPersonName}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="p-4 bg-muted/30 rounded-md font-mono text-sm break-all">
-              {viewingResponseId}
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setViewingResponseId(null)}
-              >
-                Close
-              </Button>
-              <Button
-                type="button"
-                onClick={async () => {
-                  if (viewingResponseId) {
-                    await navigator.clipboard.writeText(viewingResponseId);
-                    toast({
-                      title: "Copied!",
-                      description: "Response ID copied to clipboard",
-                    });
-                  }
-                }}
-              >
-                Copy ID
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {/* Reset button */}
         <div className="flex justify-end space-x-4 mt-4">
@@ -1743,39 +1567,6 @@ function PPECheckClient() {
                 variant="destructive"
               >
                 Reset
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Dialog for submitted ID */}
-        <Dialog open={!!submittedId}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Submitted Response ID</DialogTitle>
-              <DialogDescription>
-                The response ID has been saved successfully.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="p-4 bg-muted/30 rounded-md font-mono text-sm break-all">
-              {submittedId}
-            </div>
-            <DialogFooter className="flex justify-between">
-              <Button onClick={() => setSubmittedId(null)} variant="outline">
-                Close
-              </Button>
-              <Button
-                onClick={async () => {
-                  if (submittedId) {
-                    await navigator.clipboard.writeText(submittedId);
-                    toast({
-                      title: "Copied!",
-                      description: "Response ID copied to clipboard",
-                    });
-                  }
-                }}
-              >
-                Copy ID
               </Button>
             </DialogFooter>
           </DialogContent>
