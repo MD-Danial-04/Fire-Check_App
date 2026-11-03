@@ -42,9 +42,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { updateBAMasterList } from '@/lib/queries'
 
+const MRV_SPARES = 'MRV Spares'
+
 const locations = [
   'All Locations',
   'MRV811',
+  MRV_SPARES,
   'RFV811',
   'LF811',
   'LF812',
@@ -53,8 +56,12 @@ const locations = [
   'SPARE'
 ]
 
+const sectionOrder = ['LF811', 'LF812', 'MRV811', MRV_SPARES, 'RFV811', 'CFS811', 'SPARE', 'Others', 'Unassigned']
+
 // Helper function to get base location
 const getBaseLocation = (location: string | null, isSpare: boolean | undefined): string => {
+  if (location?.trim().toUpperCase() === MRV_SPARES.toUpperCase()) return MRV_SPARES
+
   // If it's marked as spare, always return SPARE category
   if (isSpare) return 'SPARE';
   
@@ -415,9 +422,8 @@ export default function BAMasterList() {
       }
     })
     
-    const locationOrder = ['LF811', 'LF812', 'MRV811', 'RFV811', 'CFS811', 'SPARE', 'Others', 'Unassigned']
     return Array.from(locationSet).sort((a, b) => {
-      return locationOrder.indexOf(a) - locationOrder.indexOf(b)
+      return sectionOrder.indexOf(a) - sectionOrder.indexOf(b)
     })
   }
 
@@ -596,7 +602,7 @@ export default function BAMasterList() {
       operations.push(updateBAMasterList(editBa.id, currentUpdates))
 
       // Handle swaps per component
-      const baseIsSpare = (b: BaMasterList) => getBaseLocation(b.location, b.is_spare) === 'SPARE'
+      const baseIsSpare = (b: BaMasterList) => !!b.is_spare || getBaseLocation(b.location, b.is_spare) === 'SPARE'
 
       // Backplate swap
       if (isSwapping.backplate && swapTargets.backplate) {
@@ -765,8 +771,7 @@ export default function BAMasterList() {
     
     if (baseLocationA !== baseLocationB) {
       // Use the locationOrder array for consistent location sorting
-      const locationOrder = ['LF811', 'LF812', 'MRV811', 'RFV811', 'CFS811', 'SPARE', 'Others', 'Unassigned'];
-      return locationOrder.indexOf(baseLocationA) - locationOrder.indexOf(baseLocationB);
+      return sectionOrder.indexOf(baseLocationA) - sectionOrder.indexOf(baseLocationB);
     }
     
     // Then sort by set number for MRV811 and RFV811
@@ -801,10 +806,8 @@ export default function BAMasterList() {
     });
   });
 
-  // Sort order for locations
-  const locationOrder = ['LF811', 'LF812', 'MRV811', 'RFV811', 'CFS811', 'SPARE', 'Others', 'Unassigned'];
   const sortedLocations = Object.entries(groupedBackplates).sort((a, b) => {
-    return locationOrder.indexOf(a[0]) - locationOrder.indexOf(b[0]);
+    return sectionOrder.indexOf(a[0]) - sectionOrder.indexOf(b[0]);
   });
 
   const StationCard = ({ title, items }: { title: string, items: BaMasterList[] }) => (
@@ -818,6 +821,8 @@ export default function BAMasterList() {
           if (roleName === '-') {
             if (title === 'SPARE') {
               roleName = getSpareDisplayName(backplate);
+            } else if (title === MRV_SPARES) {
+              roleName = backplate.cylinder_serial || MRV_SPARES;
             } else if (title === 'Others') {
               roleName = backplate.location || 'Unknown';
             } else if (title === 'CFS811') {
@@ -1504,6 +1509,60 @@ export default function BAMasterList() {
                           </div>
                         </div>
                       </div>
+
+                      {(groupedBackplates[MRV_SPARES] || []).length > 0 && (
+                        <div className="mt-6">
+                          <div className="bg-gray-200 dark:bg-[#2E2521] rounded-md overflow-hidden border border-gray-200 dark:border-[#FCF6EC]/20">
+                            <h3 className="text-xs tracking-[0.2em] uppercase font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] px-4 py-3 border-b border-gray-200 dark:border-[#FCF6EC]/20 bg-white">
+                              {MRV_SPARES}
+                            </h3>
+                            <div className="p-4">
+                              <div className="grid grid-cols-3 gap-6">
+                                {(groupedBackplates[MRV_SPARES] || []).map((backplate) => (
+                                  <div key={backplate.id} className="p-3 border border-gray-200 dark:border-[#FCF6EC]/10 rounded-sm bg-white dark:bg-[#2E2521]/80 shadow-sm">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
+                                        {backplate.cylinder_serial || MRV_SPARES}
+                                      </span>
+                                      <div className="flex items-center gap-2">
+                                        {(() => {
+                                          const hydroStatus = getHydroTestDueStatus(backplate.hydro_date);
+                                          if (!hydroStatus) return null;
+                                          return (
+                                            <div className={`flex items-center gap-1 ${getHydroStatusClass(hydroStatus)} text-[10px]`}>
+                                              <AlertCircle className="h-3 w-3" />
+                                              <span>{getHydroStatusText(hydroStatus).replace('Hydrostatic Test Due ', '')}</span>
+                                            </div>
+                                          );
+                                        })()}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenEdit(backplate);
+                                          }}
+                                          className="inline-flex items-center justify-center w-6 h-6 rounded-md border bg-white/90 dark:bg-neutral-900/70 text-neutral-700 dark:text-neutral-200 shadow-sm hover:bg-white dark:hover:bg-neutral-800"
+                                          aria-label="Edit BA"
+                                        >
+                                          <Pencil className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-y-2">
+                                      <div className="font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/50 uppercase tracking-[0.15em] text-[10px]">
+                                        Cylinder
+                                      </div>
+                                      <div className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[0.1em] text-[10px] text-right">
+                                        {backplate.cylinder_serial || '-'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Third Row: Others and SPARE */}
                       <div className="mt-6 grid grid-cols-2 gap-6">
@@ -1791,8 +1850,7 @@ export default function BAMasterList() {
                                 </div>
                               ))
                             )
-                          ) : locationFilter === 'SPARE' ? (
-                            // For SPARE, just list all spare backplates
+                          ) : locationFilter === 'SPARE' || locationFilter === MRV_SPARES ? (
                             (groupedBackplates[locationFilter] || []).map((backplate, index) => (
                               <div 
                           key={backplate.id}
@@ -1800,7 +1858,9 @@ export default function BAMasterList() {
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : getSpareDisplayName(backplate)}
+                                    {locationFilter === MRV_SPARES
+                                      ? (backplate.cylinder_serial || MRV_SPARES)
+                                      : getRole(backplate.location) !== '-' ? getRole(backplate.location) : getSpareDisplayName(backplate)}
                                   </span>
                                   {isServiceDueThisMonth(backplate.hydro_date) && (
                                     <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
