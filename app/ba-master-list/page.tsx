@@ -88,6 +88,20 @@ const getRole = (location: string | null): string => {
   return '-';
 }
 
+const GENERIC_SPARE_LOCATIONS = new Set(['SPARE', 'SPARE CYLINDERS', 'SPARE BACKPLATES'])
+
+// Spare rows with a specific location label (for example "MRV Spares") keep that
+// label as the card title. Generic spare locations still split into cylinders and backplates.
+const getSpareDisplayName = (ba: Pick<BaMasterList, 'location' | 'cylinder_serial' | 'serial_number'>): string => {
+  const location = ba.location?.trim()
+  if (location && !GENERIC_SPARE_LOCATIONS.has(location.toUpperCase())) {
+    return location
+  }
+  if (ba.cylinder_serial && !ba.serial_number) return 'SPARE CYLINDERS'
+  if (ba.serial_number && !ba.cylinder_serial) return 'SPARE BACKPLATES'
+  return 'SPARE'
+}
+
 // Add this new function for role ordering
 const getRoleOrder = (role: string): number => {
   const roleOrder: Record<string, number> = {
@@ -803,14 +817,7 @@ export default function BAMasterList() {
           let roleName = getRole(backplate.location);
           if (roleName === '-') {
             if (title === 'SPARE') {
-              // Distinguish between cylinders and backplates for spare items
-              if (backplate.cylinder_serial && !backplate.serial_number) {
-                roleName = 'SPARE CYLINDERS';
-              } else if (backplate.serial_number && !backplate.cylinder_serial) {
-                roleName = 'SPARE BACKPLATES';
-              } else {
-                roleName = 'SPARE';
-              }
+              roleName = getSpareDisplayName(backplate);
             } else if (title === 'Others') {
               roleName = backplate.location || 'Unknown';
             } else if (title === 'CFS811') {
@@ -1647,11 +1654,7 @@ export default function BAMasterList() {
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : 
-                                      backplate.cylinder_serial && !backplate.serial_number ? 'SPARE CYLINDERS' : 
-                                      backplate.serial_number && !backplate.cylinder_serial ? 'SPARE BACKPLATES' : 
-                                      'SPARE'
-                                    }
+                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : getSpareDisplayName(backplate)}
                                   </span>
                                   <div className="flex items-center gap-2">
                                     {(() => {
@@ -1797,11 +1800,7 @@ export default function BAMasterList() {
                               >
                                 <div className="flex items-center justify-between mb-2">
                                   <span className="font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] text-xs tracking-[0.15em] uppercase">
-                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : 
-                                      backplate.cylinder_serial && !backplate.serial_number ? 'SPARE CYLINDERS' : 
-                                      backplate.serial_number && !backplate.cylinder_serial ? 'SPARE BACKPLATES' : 
-                                      'SPARE'
-                                    }
+                                    {getRole(backplate.location) !== '-' ? getRole(backplate.location) : getSpareDisplayName(backplate)}
                                   </span>
                                   {isServiceDueThisMonth(backplate.hydro_date) && (
                                     <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400 text-[10px]">
