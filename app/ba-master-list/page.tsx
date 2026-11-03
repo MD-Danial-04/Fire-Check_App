@@ -744,9 +744,12 @@ export default function BAMasterList() {
   }
 
   // Calculate stats from backplates
+  const hasSerial = (value: string | null | undefined) => Boolean(value?.trim())
+
   const stats = {
-    total: backplates.length,
-    inService: backplates.filter(b => !b.is_spare).length,
+    total: backplates.filter(b => hasSerial(b.cylinder_serial)).length,
+    backplates: backplates.filter(b => hasSerial(b.serial_number)).length,
+    operational: backplates.filter(b => !b.is_spare).length,
     dueService: backplates.filter(b => isServiceDueThisMonth(b.hydro_date)).length,
     dueNextMonth: backplates.filter(b => isServiceDueNextMonth(b.hydro_date)).length,
     dueThisYear: backplates.filter(b => isServiceDueThisYear(b.hydro_date)).length,
@@ -1053,21 +1056,26 @@ export default function BAMasterList() {
           
           {/* Stats Overview */}
           <div className="flex flex-col mt-8 max-w-7xl mx-auto px-2">
-            <div className="grid grid-cols-3 md:grid-cols-12 gap-4">
-              <div className="flex flex-col col-span-1 md:col-span-4 items-start">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="flex flex-col items-start">
                 <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">TOTAL</p>
                 <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.total}</p>
               </div>
-              
-              <div className="flex flex-col col-span-1 md:col-span-4 items-start">
+
+              <div className="flex flex-col items-start">
                 <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">
-                  <span>IN</span>
-                  <span className="md:block">SERVICE</span>
+                  <span>TOTAL </span>
+                  <span className="md:block">BACKPLATES</span>
                 </p>
-                <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.inService}</p>
+                <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.backplates}</p>
               </div>
               
-              <div className="flex flex-col col-span-1 md:col-span-4 items-start">
+              <div className="flex flex-col items-start">
+                <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">OPERATIONAL</p>
+                <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.operational}</p>
+              </div>
+              
+              <div className="flex flex-col items-start">
                 <p className="text-[10px] font-['Azeret_Mono'] text-gray-500 dark:text-[#FCF6EC]/60 uppercase tracking-[0.2em]">SPARE</p>
                 <p className="text-[24px] md:text-[32px] font-['Azeret_Mono'] text-gray-900 dark:text-[#FCF6EC] tracking-[-0.02em]">{stats.spare}</p>
               </div>
